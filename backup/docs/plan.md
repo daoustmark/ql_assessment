@@ -149,13 +149,13 @@
   - **Step Dependencies**: Step 8
   - **User Instructions**: None
 
-- [ ] Step 16: Create base layout components
+- [x] Step 16: Create base layout components
   - **Task**: Implement layout components following the Quiet Light brand guidelines.
   - **Files**:
     - `src/frontend/components/layout/Header.tsx`: Header component
     - `src/frontend/components/layout/Footer.tsx`: Footer component
     - `src/frontend/components/layout/MainLayout.tsx`: Main layout component
-    - `src/frontend/components/layout/AdminLayout.tsx`: Admin layout component
+    - `src/frontend/components/layout/AuthLayout.tsx`: Auth layout component
     - `src/frontend/components/ui/Logo.tsx`: Logo component
   - **Step Dependencies**: Step 2, Step 3
   - **User Instructions**: None
