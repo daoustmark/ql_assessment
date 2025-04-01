@@ -112,7 +112,7 @@
   - **Step Dependencies**: Step 7, Step 8
   - **User Instructions**: None
 
-- [ ] Step 12: Create response submission endpoints
+- [x] Step 12: Create response submission endpoints
   - **Task**: Implement endpoints for submitting and retrieving responses.
   - **Files**:
     - `src/backend/controllers/response.controller.ts`: Response controller
