@@ -1,59 +1,36 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { IUser, ILoginResponse } from '../types/user.types';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 
-interface AuthContextType {
-  user: IUser | null;
-  isLoading: boolean;
-  error: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  clearError: () => void;
+interface User {
+  id: string;
+  email: string;
+  role: 'ADMIN' | 'CANDIDATE';
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+}
+
+interface AuthContextType extends AuthState {
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
+}
+
+const initialState: AuthState = {
+  user: null,
+  token: null,
+  isAuthenticated: false,
+};
+
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<IUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<AuthState>(initialState);
 
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
+  const login = useCallback(async (email: string, password: string) => {
     try {
-      const token = window.localStorage.getItem('token');
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
-
-      const response = await fetch('/api/auth/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Authentication failed');
-      }
-
-      const userData = await response.json();
-      setUser(userData);
-    } catch (err) {
-      window.localStorage.removeItem('token');
-      setError(err instanceof Error ? err.message : 'Authentication failed');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const login = async (email: string, password: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -63,59 +40,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
+        throw new Error('Login failed');
       }
 
-      const data = (await response.json()) as ILoginResponse;
-      window.localStorage.setItem('token', data.token);
-      setUser(data.user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
-      throw err;
-    } finally {
-      setIsLoading(false);
+      const { user, token } = await response.json();
+      setState({ user, token, isAuthenticated: true });
+    } catch (error) {
+      throw error;
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${state.token}`,
+        },
+      });
+      setState(initialState);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  }, [state.token]);
 
-      const token = window.localStorage.getItem('token');
-      if (token) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+  const register = useCallback(async (email: string, password: string) => {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Registration failed');
       }
 
-      window.localStorage.removeItem('token');
-      setUser(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Logout failed');
-      throw err;
-    } finally {
-      setIsLoading(false);
+      const { user, token } = await response.json();
+      setState({ user, token, isAuthenticated: true });
+    } catch (error) {
+      throw error;
     }
-  };
-
-  const clearError = () => {
-    setError(null);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider
       value={{
-        user,
-        isLoading,
-        error,
+        ...state,
         login,
         logout,
-        clearError,
+        register,
       }}
     >
       {children}
