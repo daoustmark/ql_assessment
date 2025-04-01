@@ -96,7 +96,7 @@
   - **Step Dependencies**: Step 8
   - **User Instructions**: None
 
-- [ ] Step 10: Create test session endpoints
+- [x] Step 10: Create test session endpoints
   - **Task**: Implement endpoints for creating, retrieving, and updating test sessions.
   - **Files**:
     - `src/backend/controllers/session.controller.ts`: Session controller
