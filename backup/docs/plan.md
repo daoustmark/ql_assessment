@@ -120,7 +120,7 @@
   - **Step Dependencies**: Step 7, Step 8
   - **User Instructions**: None
 
-- [ ] Step 13: Configure video storage
+- [x] Step 13: Configure video storage
   - **Task**: Set up secure video storage and retrieval using a suitable storage solution.
   - **Files**:
     - `src/backend/services/storage.service.ts`: Storage service
