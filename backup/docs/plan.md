@@ -129,7 +129,7 @@
   - **Step Dependencies**: Step 12
   - **User Instructions**: Set up an appropriate cloud storage service (e.g., AWS S3, Google Cloud Storage) for video files. Add access credentials to the `.env` file.
 
-- [ ] Step 14: Implement scoring algorithms
+- [x] Step 14: Implement scoring algorithms
   - **Task**: Create scoring logic for automatically graded question types.
   - **Files**:
     - `src/backend/services/scoring.service.ts`: Scoring service
