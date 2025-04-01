@@ -104,7 +104,7 @@
   - **Step Dependencies**: Step 6, Step 8
   - **User Instructions**: None
 
-- [ ] Step 11: Create question management endpoints
+- [x] Step 11: Create question management endpoints
   - **Task**: Implement endpoints for managing questions and their categories.
   - **Files**:
     - `src/backend/controllers/question.controller.ts`: Question controller
