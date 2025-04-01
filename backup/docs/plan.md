@@ -172,7 +172,7 @@
   - **Step Dependencies**: Step 2, Step 3
   - **User Instructions**: None
 
-- [ ] Step 18: Create test-specific UI components
+- [x] Step 18: Create test-specific UI components
   - **Task**: Implement components specific to the test-taking experience.
   - **Files**:
     - `src/frontend/components/test/Timer.tsx`: Countdown timer component
