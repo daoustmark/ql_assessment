@@ -211,7 +211,7 @@
   - **Step Dependencies**: Step 10, Step 15
   - **User Instructions**: None
 
-- [ ] Step 22: Implement test session routing and page structure
+- [x] Step 22: Implement test session routing and page structure
   - **Task**: Create routing logic for test sessions, including access control for different days.
   - **Files**:
     - `src/frontend/components/pages/TestSession.tsx`: Test session page
