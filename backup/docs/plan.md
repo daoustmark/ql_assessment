@@ -77,7 +77,7 @@
   - **Step Dependencies**: Step 6
   - **User Instructions**: None
 
-- [ ] Step 8: Create authentication endpoints
+- [x] Step 8: Create authentication endpoints
   - **Task**: Implement JWT authentication with secure login/logout functionality.
   - **Files**:
     - `src/backend/controllers/auth.controller.ts`: Authentication controller
