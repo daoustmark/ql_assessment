@@ -139,7 +139,7 @@
 
 ## Frontend Core Components
 
-- [ ] Step 15: Create authentication context and hooks
+- [x] Step 15: Create authentication context and hooks
   - **Task**: Implement React context for authentication state management and related hooks.
   - **Files**:
     - `src/contexts/AuthContext.tsx`: Authentication context
