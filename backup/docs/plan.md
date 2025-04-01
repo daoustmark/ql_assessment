@@ -160,7 +160,7 @@
   - **Step Dependencies**: Step 2, Step 3
   - **User Instructions**: None
 
-- [ ] Step 17: Create form UI components
+- [x] Step 17: Create form UI components
   - **Task**: Implement reusable form components using Shadcn.
   - **Files**:
     - `src/frontend/components/ui/Input.tsx`: Input component
