@@ -1,20 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
 
-interface TimerProps {
+export interface TimerProps {
   duration: number; // in seconds
-  onComplete?: () => void;
+  onTimeUp?: () => void;
   className?: string;
 }
 
-export function Timer({ duration, onComplete, className }: TimerProps) {
+export function Timer({ duration, onTimeUp, className }: TimerProps) {
   const [timeLeft, setTimeLeft] = useState(duration);
   const [isWarning, setIsWarning] = useState(false);
   const [isDanger, setIsDanger] = useState(false);
 
   useEffect(() => {
     if (timeLeft <= 0) {
-      onComplete?.();
+      onTimeUp?.();
       return;
     }
 
@@ -32,7 +32,7 @@ export function Timer({ duration, onComplete, className }: TimerProps) {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, onComplete]);
+  }, [timeLeft, onTimeUp]);
 
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -43,6 +43,12 @@ export function Timer({ duration, onComplete, className }: TimerProps) {
       .padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  const getTimerColor = () => {
+    if (timeLeft <= 60) return 'text-red-500';
+    if (timeLeft <= 300) return 'text-yellow-500';
+    return 'text-green-500';
+  };
+
   return (
     <div
       className={cn(
@@ -50,6 +56,7 @@ export function Timer({ duration, onComplete, className }: TimerProps) {
         isDanger && 'bg-red-100 text-red-700',
         isWarning && !isDanger && 'bg-yellow-100 text-yellow-700',
         !isWarning && !isDanger && 'bg-gray-100 text-gray-700',
+        getTimerColor(),
         className
       )}
     >
