@@ -87,7 +87,7 @@
   - **Step Dependencies**: Step 5
   - **User Instructions**: Generate a secure JWT secret key and add it to the `.env` file.
 
-- [ ] Step 9: Create user management endpoints
+- [x] Step 9: Create user management endpoints
   - **Task**: Implement CRUD operations for user management.
   - **Files**:
     - `src/backend/controllers/user.controller.ts`: User controller
