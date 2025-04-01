@@ -182,7 +182,7 @@
   - **Step Dependencies**: Step 17
   - **User Instructions**: None
 
-- [ ] Step 19: Create question type components
+- [x] Step 19: Create question type components
   - **Task**: Implement components for different question types.
   - **Files**:
     - `src/frontend/components/test/MultipleChoiceQuestion.tsx`: Multiple-choice question component
