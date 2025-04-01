@@ -1,0 +1,1515 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Backend Implementation Rules
+
+## API Design Principles
+
+### RESTful Endpoints
+
+Follow these patterns for API endpoints:
+
+- Use nouns for resources (e.g., `/users`, `/questions`, `/sessions`)
+- Use HTTP methods appropriately:
+  - `GET` for retrieving data
+  - `POST` for creating resources
+  - `PUT` for updating resources (full update)
+  - `PATCH` for partial updates
+  - `DELETE` for removing resources
+- Use nested routes for sub-resources (e.g., `/sessions/:sessionId/questions`)
+- Include versioning in the API path (e.g., `/api/v1/users`)
+
+### API Structure
+
+```
+/api/v1
+├── /auth
+│   ├── POST /login
+│   ├── POST /logout
+│   └── POST /refresh-token
+├── /users
+│   ├── GET /
+│   ├── GET /:id
+│   ├── POST /
+│   ├── PUT /:id
+│   └── DELETE /:id
+├── /test-sessions
+│   ├── GET /
+│   ├── GET /current
+│   ├── GET /:id
+│   └── POST /
+├── /sections
+│   ├── GET /:id
+│   ├── GET /:id/questions
+│   └── POST /:id/answers
+└── /questions
+    ├── GET /:id
+    └── POST /:id/video-response
+```
+
+### API Response Structure
+
+Standardize API responses:
+
+```typescript
+// Success response
+{
+  success: true,
+  data: {
+    // Resource data
+  },
+  meta: {
+    // Pagination, filters, etc.
+  }
+}
+
+// Error response
+{
+  success: false,
+  error: {
+    code: "VALIDATION_ERROR",
+    message: "The request was invalid",
+    details: [
+      {
+        field: "email",
+        message: "Email is required"
+      }
+    ]
+  }
+}
+```
+
+### Request Validation
+
+Use Zod for request validation:
+
+```typescript
+import { z } from 'zod';
+import { Request, Response, NextFunction } from 'express';
+
+// Define validation schema
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+// Create validation middleware
+export const validateLogin = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    loginSchema.parse(req.body);
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid request data',
+          details: error.errors.map(err => ({
+            field: err.path.join('.'),
+            message: err.message,
+          })),
+        },
+      });
+    }
+    
+    next(error);
+  }
+};
+```
+
+## Database Structure
+
+### Entity Relationship Diagram
+
+```
+┌────────────┐       ┌─────────────┐       ┌─────────┐
+│    User    │       │ TestSession │       │ Section │
+├────────────┤       ├─────────────┤       ├─────────┤
+│ _id        │       │ _id         │       │ _id     │
+│ email      │       │ user        │─────▶ │ title   │
+│ password   │       │ startDate   │       │ desc    │
+│ firstName  │       │ endDate     │       │ type    │
+│ lastName   │       │ day         │◀────┐ │ time    │
+│ role       │◀──────│ status      │     │ │ day     │
+└────────────┘       │ currentSec. │─────┘ │ order   │
+                     │ sections    │─────▶ └─────────┘
+                     │ progress    │             │
+                     └─────────────┘             │
+                                                 ▼
+                                          ┌────────────┐
+                     ┌─────────────┐      │  Question  │
+                     │   Answer    │      ├────────────┤
+                     ├─────────────┤      │ _id        │
+                     │ _id         │      │ type       │
+                     │ user        │      │ content    │
+                     │ question    │◀─────│ options    │
+                     │ section     │      │ rubric     │
+                     │ session     │      └────────────┘
+                     │ value       │
+                     │ videoUrl    │
+                     │ score       │
+                     │ scoredBy    │
+                     └─────────────┘
+```
+
+### MongoDB Schema Design
+
+Use Mongoose for schema definition:
+
+```typescript
+// src/models/User.ts
+import mongoose, { Document, Schema } from 'mongoose';
+import bcrypt from 'bcrypt';
+
+export interface IUser extends Document {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: 'candidate' | 'admin';
+  comparePassword(candidatePassword: string): Promise<boolean>;
+  // other fields...
+}
+
+const UserSchema = new Schema<IUser>({
+  email: {
+    type: String,
+    required: [true, 'Email is required'],
+    unique: true,
+    lowercase: true,
+    trim: true,
+  },
+  password: {
+    type: String,
+    required: [true, 'Password is required'],
+    minlength: [8, 'Password must be at least 8 characters'],
+    select: false, // Don't include by default in queries
+  },
+  firstName: {
+    type: String,
+    required: [true, 'First name is required'],
+    trim: true,
+  },
+  lastName: {
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true,
+  },
+  role: {
+    type: String,
+    enum: ['candidate', 'admin'],
+    default: 'candidate',
+  },
+}, {
+  timestamps: true, // Adds createdAt and updatedAt
+});
+
+// Pre-save hook to hash password
+UserSchema.pre('save', async function(next) {
+  // Only hash the password if it's modified
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error as Error);
+  }
+});
+
+// Method to compare passwords
+UserSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+export const User = mongoose.model<IUser>('User', UserSchema);
+
+// src/models/TestSession.ts
+import mongoose, { Document, Schema, Types } from 'mongoose';
+
+export interface ITestSession extends Document {
+  user: Types.ObjectId;
+  startDate: Date;
+  endDate?: Date;
+  day: 1 | 2;
+  status: 'pending' | 'in-progress' | 'completed';
+  currentSection?: Types.ObjectId;
+  sections: Types.ObjectId[];
+  progress: {
+    sectionsCompleted: number;
+    totalSections: number;
+  };
+  // other fields...
+}
+
+const TestSessionSchema = new Schema<ITestSession>({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  startDate: {
+    type: Date,
+    default: Date.now,
+  },
+  endDate: {
+    type: Date,
+  },
+  day: {
+    type: Number,
+    enum: [1, 2],
+    required: true,
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'in-progress', 'completed'],
+    default: 'pending',
+  },
+  currentSection: {
+    type: Schema.Types.ObjectId,
+    ref: 'Section',
+  },
+  sections: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Section',
+  }],
+  progress: {
+    sectionsCompleted: {
+      type: Number,
+      default: 0,
+    },
+    totalSections: {
+      type: Number,
+      default: 0,
+    },
+  },
+}, {
+  timestamps: true,
+});
+
+export const TestSession = mongoose.model<ITestSession>('TestSession', TestSessionSchema);
+
+// src/models/Section.ts
+import mongoose, { Document, Schema, Types } from 'mongoose';
+
+export interface ISection extends Document {
+  title: string;
+  description: string;
+  type: 'multiple-choice' | 'negotiation' | 'ethical-dilemma' | 'email' | 'video' | 'behavioral';
+  timeLimit?: number; // in seconds
+  questions: Types.ObjectId[];
+  day: 1 | 2;
+  order: number;
+  // other fields...
+}
+
+const SectionSchema = new Schema<ISection>({
+  title: {
+    type: String,
+    required: true,
+  },
+  description: {
+    type: String,
+    required: true,
+  },
+  type: {
+    type: String,
+    enum: ['multiple-choice', 'negotiation', 'ethical-dilemma', 'email', 'video', 'behavioral'],
+    required: true,
+  },
+  timeLimit: {
+    type: Number,
+  },
+  questions: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Question',
+  }],
+  day: {
+    type: Number,
+    enum: [1, 2],
+    required: true,
+  },
+  order: {
+    type: Number,
+    required: true,
+  },
+}, {
+  timestamps: true,
+});
+
+export const Section = mongoose.model<ISection>('Section', SectionSchema);
+
+// src/models/Question.ts
+import mongoose, { Document, Schema } from 'mongoose';
+
+export interface IQuestion extends Document {
+  type: 'multiple-choice' | 'text' | 'video' | 'forced-choice' | 'likert' | 'open-ended';
+  content: string;
+  options?: string[];
+  correctOption?: number; // For multiple-choice
+  scoringRubric?: {
+    criteria: string;
+    levels: {
+      score: number;
+      description: string;
+    }[];
+  };
+  // other fields...
+}
+
+const QuestionSchema = new Schema<IQuestion>({
+  type: {
+    type: String,
+    enum: ['multiple-choice', 'text', 'video', 'forced-choice', 'likert', 'open-ended'],
+    required: true,
+  },
+  content: {
+    type: String,
+    required: true,
+  },
+  options: [{
+    type: String,
+  }],
+  correctOption: {
+    type: Number,
+  },
+  scoringRubric: {
+    criteria: String,
+    levels: [{
+      score: Number,
+      description: String,
+    }],
+  },
+}, {
+  timestamps: true,
+});
+
+export const Question = mongoose.model<IQuestion>('Question', QuestionSchema);
+
+// src/models/Answer.ts
+import mongoose, { Document, Schema, Types } from 'mongoose';
+
+export interface IAnswer extends Document {
+  user: Types.ObjectId;
+  question: Types.ObjectId;
+  section: Types.ObjectId;
+  session: Types.ObjectId;
+  value: string | number | boolean | string[];
+  videoUrl?: string;
+  score?: number;
+  scoredBy?: Types.ObjectId;
+  scoringNotes?: string;
+  // other fields...
+}
+
+const AnswerSchema = new Schema<IAnswer>({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  question: {
+    type: Schema.Types.ObjectId,
+    ref: 'Question',
+    required: true,
+  },
+  section: {
+    type: Schema.Types.ObjectId,
+    ref: 'Section',
+    required: true,
+  },
+  session: {
+    type: Schema.Types.ObjectId,
+    ref: 'TestSession',
+    required: true,
+  },
+  value: {
+    type: Schema.Types.Mixed,
+    required: true,
+  },
+  videoUrl: {
+    type: String,
+  },
+  score: {
+    type: Number,
+  },
+  scoredBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  scoringNotes: {
+    type: String,
+  },
+}, {
+  timestamps: true,
+});
+
+export const Answer = mongoose.model<IAnswer>('Answer', AnswerSchema);
+
+## Authentication & Authorization
+
+### JWT Implementation
+
+Use JWT for authentication:
+
+```typescript
+// src/utils/jwt.ts
+import jwt from 'jsonwebtoken';
+import { IUser } from '../models/User';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'development-secret';
+const JWT_EXPIRES_IN = '1d';
+const JWT_REFRESH_EXPIRES_IN = '7d';
+
+export const generateTokens = (user: IUser) => {
+  const payload = {
+    userId: user._id,
+    email: user.email,
+    role: user.role,
+  };
+  
+  // Access token (short-lived)
+  const accessToken = jwt.sign(payload, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
+  });
+  
+  // Refresh token (longer-lived)
+  const refreshToken = jwt.sign(payload, JWT_SECRET, {
+    expiresIn: JWT_REFRESH_EXPIRES_IN,
+  });
+  
+  return { accessToken, refreshToken };
+};
+
+export const verifyToken = (token: string) => {
+  try {
+    return jwt.verify(token, JWT_SECRET) as jwt.JwtPayload & {
+      userId: string;
+      email: string;
+      role: string;
+    };
+  } catch (error) {
+    throw new Error('Invalid token');
+  }
+};
+```
+
+### Authentication Middleware
+
+```typescript
+// src/middleware/auth.ts
+import { Request, Response, NextFunction } from 'express';
+import { verifyToken } from '../utils/jwt';
+
+// Extend Express Request type
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        userId: string;
+        email: string;
+        role: string;
+      };
+    }
+  }
+}
+
+export const authenticate = (req: Request, res: Response, next: NextFunction) => {
+  // Get token from headers
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required',
+      },
+    });
+  }
+  
+  const token = authHeader.split(' ')[1];
+  
+  try {
+    // Verify token
+    const decoded = verifyToken(token);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      error: {
+        code: 'INVALID_TOKEN',
+        message: 'Invalid or expired token',
+      },
+    });
+  }
+};
+
+// Role-based authorization
+export const authorize = (roles: string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Authentication required',
+        },
+      });
+    }
+    
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions',
+        },
+      });
+    }
+    
+    next();
+  };
+};
+```
+
+## File Storage
+
+### S3 Integration for Video Uploads
+
+```typescript
+// src/services/s3Service.ts
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { v4 as uuidv4 } from 'uuid';
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+  },
+});
+
+const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quiet-light-test-videos';
+
+export const uploadVideo = async (videoBuffer: Buffer, userId: string, questionId: string): Promise<string> => {
+  const fileKey = `videos/${userId}/${questionId}/${uuidv4()}.webm`;
+  
+  const command = new PutObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: fileKey,
+    Body: videoBuffer,
+    ContentType: 'video/webm',
+  });
+  
+  await s3Client.send(command);
+  
+  return fileKey;
+};
+
+export const getVideoUrl = async (fileKey: string): Promise<string> => {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: fileKey,
+  });
+  
+  // Generate a signed URL that expires in 1 hour
+  return getSignedUrl(s3Client, command, { expiresIn: 3600 });
+};
+```
+
+## Controller Patterns
+
+### Controller Structure
+
+Follow this pattern for controllers:
+
+```typescript
+// src/controllers/authController.ts
+import { Request, Response } from 'express';
+import { User } from '../models/User';
+import { generateTokens } from '../utils/jwt';
+import { catchAsync } from '../utils/catchAsync';
+
+export const login = catchAsync(async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  
+  // Find user with password
+  const user = await User.findOne({ email }).select('+password');
+  
+  if (!user || !(await user.comparePassword(password))) {
+    return res.status(401).json({
+      success: false,
+      error: {
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid email or password',
+      },
+    });
+  }
+  
+  // Generate tokens
+  const { accessToken, refreshToken } = generateTokens(user);
+  
+  // Remove password from user object
+  user.password = undefined as any;
+  
+  return res.status(200).json({
+    success: true,
+    data: {
+      user,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    },
+  });
+});
+
+export const refreshToken = catchAsync(async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+  
+  // Verify refresh token
+  const decoded = verifyToken(refreshToken);
+  
+  // Find user
+  const user = await User.findById(decoded.userId);
+  
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: {
+        code: 'INVALID_TOKEN',
+        message: 'Invalid refresh token',
+      },
+    });
+  }
+  
+  // Generate new tokens
+  const tokens = generateTokens(user);
+  
+  return res.status(200).json({
+    success: true,
+    data: {
+      tokens,
+    },
+  });
+});
+```
+
+### Error Handling Helper
+
+```typescript
+// src/utils/catchAsync.ts
+import { Request, Response, NextFunction } from 'express';
+
+export const catchAsync = (fn: Function) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+```
+
+## Error Handling
+
+### Global Error Handler
+
+```typescript
+// src/middleware/errorHandler.ts
+import { Request, Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
+
+export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('Error:', err);
+  
+  // Default error
+  let statusCode = 500;
+  let errorCode = 'SERVER_ERROR';
+  let message = 'An unexpected error occurred';
+  let details = undefined;
+  
+  // Mongoose validation error
+  if (err instanceof mongoose.Error.ValidationError) {
+    statusCode = 400;
+    errorCode = 'VALIDATION_ERROR';
+    message = 'Validation failed';
+    details = Object.values(err.errors).map(error => ({
+      field: error.path,
+      message: error.message,
+    }));
+  }
+  
+  // Mongoose duplicate key error
+  if (err.code === 11000) {
+    statusCode = 400;
+    errorCode = 'DUPLICATE_KEY';
+    message = 'A record with this value already exists';
+    const field = Object.keys(err.keyValue)[0];
+    details = [{ field, message: `${field} already exists` }];
+  }
+  
+  // JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    statusCode = 401;
+    errorCode = 'INVALID_TOKEN';
+    message = 'Invalid token';
+  }
+  
+  if (err.name === 'TokenExpiredError') {
+    statusCode = 401;
+    errorCode = 'EXPIRED_TOKEN';
+    message = 'Token has expired';
+  }
+  
+  // Custom API errors
+  if (err.statusCode && err.code) {
+    statusCode = err.statusCode;
+    errorCode = err.code;
+    message = err.message;
+    details = err.details;
+  }
+  
+  return res.status(statusCode).json({
+    success: false,
+    error: {
+      code: errorCode,
+      message,
+      details,
+    },
+  });
+};
+
+// Custom API Error class
+export class ApiError extends Error {
+  statusCode: number;
+  code: string;
+  details?: any[];
+  
+  constructor(statusCode: number, code: string, message: string, details?: any[]) {
+    super(message);
+    this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
+    
+    Error.captureStackTrace(this, this.constructor);
+  }
+  
+  static badRequest(message: string, code = 'BAD_REQUEST', details?: any[]) {
+    return new ApiError(400, code, message, details);
+  }
+  
+  static unauthorized(message: string, code = 'UNAUTHORIZED', details?: any[]) {
+    return new ApiError(401, code, message, details);
+  }
+  
+  static forbidden(message: string, code = 'FORBIDDEN', details?: any[]) {
+    return new ApiError(403, code, message, details);
+  }
+  
+  static notFound(message: string, code = 'NOT_FOUND', details?: any[]) {
+    return new ApiError(404, code, message, details);
+  }
+  
+  static internal(message: string, code = 'SERVER_ERROR', details?: any[]) {
+    return new ApiError(500, code, message, details);
+  }
+}
+```
+
+## Testing Backend
+
+### Jest and Supertest Setup
+
+```typescript
+// src/tests/setup.ts
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+
+let mongoServer: MongoMemoryServer;
+
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  const uri = mongoServer.getUri();
+  await mongoose.connect(uri);
+});
+
+afterAll(async () => {
+  await mongoose.disconnect();
+  await mongoServer.stop();
+});
+
+afterEach(async () => {
+  const collections = mongoose.connection.collections;
+  for (const key in collections) {
+    await collections[key].deleteMany({});
+  }
+});
+```
+
+### Controller Tests
+
+```typescript
+// src/tests/controllers/authController.test.ts
+import request from 'supertest';
+import app from '../../app';
+import { User } from '../../models/User';
+
+describe('Auth Controller', () => {
+  beforeEach(async () => {
+    await User.create({
+      email: 'test@example.com',
+      password: 'password123',
+      firstName: 'Test',
+      lastName: 'User',
+      role: 'candidate',
+    });
+  });
+  
+  describe('POST /api/v1/auth/login', () => {
+    it('should login with valid credentials', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'password123',
+        });
+      
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.tokens).toHaveProperty('accessToken');
+      expect(res.body.data.tokens).toHaveProperty('refreshToken');
+      expect(res.body.data.user).toHaveProperty('email', 'test@example.com');
+      expect(res.body.data.user).not.toHaveProperty('password');
+    });
+    
+    it('should return 401 with invalid credentials', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'wrongpassword',
+        });
+      
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toHaveProperty('code', 'INVALID_CREDENTIALS');
+    });
+  });
+});
+```
+
+## API Documentation
+
+### Swagger Setup
+
+```typescript
+// src/config/swagger.ts
+import swaggerJsdoc from 'swagger-jsdoc';
+import swaggerUi from 'swagger-ui-express';
+import { Express } from 'express';
+
+const options = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Quiet Light Advisor Aptitude Test API',
+      version: '1.0.0',
+      description: 'API for the Quiet Light Advisor Aptitude Test platform',
+    },
+    servers: [
+      {
+        url: '/api/v1',
+        description: 'Development server',
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
+  },
+  apis: ['./src/routes/*.ts', './src/models/*.ts'],
+};
+
+const specs = swaggerJsdoc(options);
+
+export const setupSwagger = (app: Express) => {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+};
+```
+
+## Security Best Practices
+
+### Security Middleware
+
+```typescript
+// src/middleware/security.ts
+import { Express } from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import cors from 'cors';
+import xss from 'xss-clean';
+import hpp from 'hpp';
+
+export const setupSecurity = (app: Express) => {
+  // Set security headers
+  app.use(helmet());
+  
+  // Enable CORS
+  app.use(cors({
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: true,
+  }));
+  
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use('/api', limiter);
+  
+  // Data sanitization against XSS
+  app.use(xss());
+  
+  // Prevent parameter pollution
+  app.use(hpp());
+};
+```
+
+## Environment Configuration
+
+### Environment Variables Structure
+
+Create a `.env.example` file with this structure:
+
+```
+# Server
+NODE_ENV=development
+PORT=5000
+API_VERSION=v1
+API_PREFIX=/api
+
+# Database
+MONGODB_URI=mongodb://localhost:27017/quiet-light-test
+MONGODB_USER=
+MONGODB_PASSWORD=
+
+# Authentication
+JWT_SECRET=your-secret-key-here
+JWT_EXPIRES_IN=1d
+JWT_REFRESH_EXPIRES_IN=7d
+
+# AWS S3
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+S3_BUCKET_NAME=quiet-light-test-videos
+
+# CORS
+CORS_ORIGIN=http://localhost:3000
+```
+
+## Application Structure
+
+```
+src/
+├── config/               # Configuration files
+│   ├── database.ts       # MongoDB configuration
+│   ├── swagger.ts        # API documentation
+│   └── express.ts        # Express configuration
+├── controllers/          # Request handlers
+│   ├── authController.ts
+│   ├── userController.ts
+│   ├── testController.ts
+│   └── ...
+├── middleware/           # Middleware functions
+│   ├── auth.ts           # Authentication middleware
+│   ├── errorHandler.ts   # Global error handler
+│   └── validation.ts     # Request validation
+├── models/               # Database schemas
+│   ├── User.ts
+│   ├── TestSession.ts
+│   ├── Section.ts
+│   └── ...
+├── routes/               # API routes
+│   ├── auth.ts
+│   ├── users.ts
+│   ├── testSessions.ts
+│   └── ...
+├── services/             # Business logic
+│   ├── authService.ts
+│   ├── testService.ts
+│   ├── s3Service.ts
+│   └── ...
+├── types/                # TypeScript type definitions
+│   ├── express.d.ts      # Express type extensions
+│   └── ...
+├── utils/                # Utility functions
+│   ├── jwt.ts            # JWT helpers
+│   ├── catchAsync.ts     # Async error handling
+│   └── ...
+├── app.ts                # Express app setup
+└── server.ts             # Entry point
+```
+
+## Server Setup
+
+```typescript
+// src/app.ts
+import express from 'express';
+import { setupSecurity } from './middleware/security';
+import { setupSwagger } from './config/swagger';
+import { errorHandler } from './middleware/errorHandler';
+import authRoutes from './routes/auth';
+import userRoutes from './routes/users';
+import testSessionRoutes from './routes/testSessions';
+import sectionRoutes from './routes/sections';
+import questionRoutes from './routes/questions';
+
+const app = express();
+
+// Body parser
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Security middleware
+setupSecurity(app);
+
+// API routes
+const apiPrefix = process.env.API_PREFIX || '/api';
+const apiVersion = process.env.API_VERSION || 'v1';
+const baseUrl = `${apiPrefix}/${apiVersion}`;
+
+app.use(`${baseUrl}/auth`, authRoutes);
+app.use(`${baseUrl}/users`, userRoutes);
+app.use(`${baseUrl}/test-sessions`, testSessionRoutes);
+app.use(`${baseUrl}/sections`, sectionRoutes);
+app.use(`${baseUrl}/questions`, questionRoutes);
+
+// API documentation
+setupSwagger(app);
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Resource not found',
+    },
+  });
+});
+
+// Global error handler
+app.use(errorHandler);
+
+export default app;
+```
+
+```typescript
+// src/server.ts
+import dotenv from 'dotenv';
+dotenv.config();
+
+import app from './app';
+import { connectDB } from './config/database';
+
+const PORT = process.env.PORT || 5000;
+
+// Connect to database
+connectDB()
+  .then(() => {
+    console.log('Connected to MongoDB');
+    
+    // Start server
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Database connection failed', err);
+    process.exit(1);
+  });
+
+// Handle unhandled rejections
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection', err);
+  process.exit(1);
+});
+```
+
+## Deployment Considerations
+
+### Docker Setup
+
+Create a `Dockerfile`:
+
+```dockerfile
+FROM node:20-alpine
+
+WORKDIR /usr/src/app
+
+# Copy package files and install dependencies
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy application code
+COPY dist/ ./dist/
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Expose port
+EXPOSE 5000
+
+# Start application
+CMD ["node", "dist/server.js"]
+```
+
+Create a `.dockerignore` file:
+
+```
+node_modules
+npm-debug.log
+.git
+.github
+.vscode
+.env
+.env.*
+*.md
+test
+coverage
+```
+
+### Docker Compose for Local Development
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./src:/usr/src/app/src
+      - ./nodemon.json:/usr/src/app/nodemon.json
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:27017/quiet-light-test
+    depends_on:
+      - mongo
+    command: npm run dev
+  
+  mongo:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
+```
+
+Create a `Dockerfile.dev` for development:
+
+```dockerfile
+FROM node:20-alpine
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 5000
+
+CMD ["npm", "run", "dev"]
+```
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflow
+
+Create a `.github/workflows/ci.yml` file:
+
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Lint
+        run: npm run lint
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Test
+        run: npm test
+      
+      - name: Upload build artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v3
+        with:
+          name: build
+          path: dist/
+  
+  deploy:
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build
+          path: dist/
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: yourusername/quiet-light-test:latest
+      
+      # Add deployment steps for your hosting platform here
+```
+
+## Performance Optimization
+
+### Database Indexing
+
+Add appropriate indexes to schemas:
+
+```typescript
+// Example: Add indexes to User schema
+UserSchema.index({ email: 1 }, { unique: true });
+
+// Example: Add indexes to TestSession schema
+TestSessionSchema.index({ user: 1, day: 1 });
+TestSessionSchema.index({ status: 1 });
+
+// Example: Add indexes to Answer schema
+AnswerSchema.index({ user: 1, question: 1 }, { unique: true });
+AnswerSchema.index({ session: 1 });
+AnswerSchema.index({ section: 1 });
+```
+
+### Query Optimization
+
+Use lean queries for read operations:
+
+```typescript
+// Instead of
+const user = await User.findById(userId);
+
+// Use lean() for better performance
+const user = await User.findById(userId).lean();
+```
+
+Implement pagination for list endpoints:
+
+```typescript
+// src/controllers/userController.ts
+export const getUsers = catchAsync(async (req: Request, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+  
+  const users = await User.find()
+    .skip(skip)
+    .limit(limit)
+    .sort({ createdAt: -1 })
+    .lean();
+  
+  const total = await User.countDocuments();
+  
+  return res.status(200).json({
+    success: true,
+    data: users,
+    meta: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  });
+});
+```
+
+## Logging
+
+### Winston Logger Setup
+
+```typescript
+// src/utils/logger.ts
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'api' },
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      ),
+    }),
+  ],
+});
+
+// Add file transports in production
+if (process.env.NODE_ENV === 'production') {
+  logger.add(new winston.transports.File({ 
+    filename: 'logs/error.log',
+    level: 'error',
+    maxsize: 10485760, // 10MB
+    maxFiles: 5,
+  }));
+  
+  logger.add(new winston.transports.File({ 
+    filename: 'logs/combined.log',
+    maxsize: 10485760, // 10MB
+    maxFiles: 5,
+  }));
+}
+
+export default logger;
+```
+
+### Request Logging Middleware
+
+```typescript
+// src/middleware/requestLogger.ts
+import { Request, Response, NextFunction } from 'express';
+import logger from '../utils/logger';
+
+export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
+  // Generate request ID
+  const requestId = req.headers['x-request-id'] || `req-${Date.now()}`;
+  
+  // Log request
+  logger.info(`Request: ${req.method} ${req.originalUrl}`, {
+    requestId,
+    method: req.method,
+    url: req.originalUrl,
+    ip: req.ip,
+    userId: req.user?.userId,
+  });
+  
+  // Capture response time
+  const start = Date.now();
+  
+  // Log response
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    
+    const logMethod = res.statusCode >= 400 ? logger.error : logger.info;
+    
+    logMethod(`Response: ${res.statusCode} ${duration}ms`, {
+      requestId,
+      statusCode: res.statusCode,
+      duration,
+      userId: req.user?.userId,
+    });
+  });
+  
+  next();
+};
+```
+
+## Monitoring
+
+### Health Check Endpoint
+
+```typescript
+// src/routes/health.ts
+import express from 'express';
+import mongoose from 'mongoose';
+
+const router = express.Router();
+
+router.get('/', async (req, res) => {
+  const healthcheck = {
+    uptime: process.uptime(),
+    message: 'OK',
+    timestamp: Date.now(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+  };
+  
+  try {
+    res.status(200).json(healthcheck);
+  } catch (error) {
+    healthcheck.message = 'ERROR';
+    res.status(503).json(healthcheck);
+  }
+});
+
+export default router;
+```
+
+Add to app.ts:
+
+```typescript
+import healthRouter from './routes/health';
+app.use('/health', healthRouter);
+```

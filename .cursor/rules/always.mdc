@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+As you build this project follow these rules. First go in sequential order as it's laid out in plan.md. After each step in plan.md allow for user testing to confirm that everything is working correctly. Upon confirmation run a commit to our GitHub repository And update our plan.md file

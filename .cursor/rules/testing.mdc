@@ -1,0 +1,2343 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+## Continuous Integration
+
+### GitHub Actions Workflow
+
+Create a CI workflow for running tests:
+
+```yaml
+# .github/workflows/test.yml
+name: Test
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main, development]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Lint
+        run: npm run lint
+      
+      - name: Run unit and integration tests
+        run: npm test -- --coverage
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./coverage
+      
+      - name: Install Cypress
+        run: npx cypress install
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Start server for E2E tests
+        run: npm run start:test &
+      
+      - name: Run E2E tests
+        run: npx cypress run
+```
+
+## Test-Driven Development (TDD)
+
+### TDD Process
+
+1. **Red**: Write a failing test that defines the expected behavior
+2. **Green**: Implement the minimum code necessary to make the test pass
+3. **Refactor**: Clean up the code while keeping the tests passing
+
+Example TDD workflow for a new feature:
+
+```typescript
+// Step 1: Write a failing test (RED)
+// VideoRecorder.test.tsx
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { VideoRecorder } from './VideoRecorder';
+
+describe('VideoRecorder', () => {
+  it('should start recording when start button is clicked', async () => {
+    // Mock navigator.mediaDevices.getUserMedia
+    const mockGetUserMedia = jest.fn().mockResolvedValue({
+      getTracks: () => [{ stop: jest.fn() }],
+    });
+    
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia: mockGetUserMedia },
+      writable: true,
+    });
+    
+    const onRecordingComplete = jest.fn();
+    
+    render(<VideoRecorder onRecordingComplete={onRecordingComplete} maxDuration={30} />);
+    
+    // Check that recording hasn't started yet
+    expect(screen.getByText('Start Recording')).toBeInTheDocument();
+    expect(screen.queryByText(/Recording:/)).not.toBeInTheDocument();
+    
+    // Click start button
+    fireEvent.click(screen.getByText('Start Recording'));
+    
+    // Check that getUserMedia was called with video and audio
+    expect(mockGetUserMedia).toHaveBeenCalledWith({ video: true, audio: true });
+    
+    // Check that recording started
+    await waitFor(() => {
+      expect(screen.queryByText('Start Recording')).not.toBeInTheDocument();
+      expect(screen.getByText(/Recording:/)).toBeInTheDocument();
+    });
+  });
+});
+
+// Step 2: Implement the minimum code to pass (GREEN)
+// VideoRecorder.tsx
+import React, { useState, useRef } from 'react';
+import { Button } from './Button';
+
+interface VideoRecorderProps {
+  onRecordingComplete: (blob: Blob) => void;
+  maxDuration?: number;
+}
+
+export const VideoRecorder: React.FC<VideoRecorderProps> = ({
+  onRecordingComplete,
+  maxDuration = 120,
+}) => {
+  const [isRecording, setIsRecording] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(maxDuration);
+  
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+    }
+  };
+  
+  return (
+    <div>
+      {isRecording && (
+        <div>Recording: {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}</div>
+      )}
+      
+      {!isRecording && (
+        <Button onClick={startRecording}>Start Recording</Button>
+      )}
+    </div>
+  );
+};
+
+// Step 3: Refactor the code (REFACTOR)
+// Extract recording logic to a custom hook for better testability
+// useVideoRecorder.ts
+import { useState, useRef, useEffect } from 'react';
+
+interface VideoRecorderOptions {
+  maxDuration?: number;
+}
+
+export function useVideoRecorder({ maxDuration = 120 }: VideoRecorderOptions = {}) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(maxDuration);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+  
+  useEffect(() => {
+    return () => {
+      // Clean up resources
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+  
+  const startRecording = async () => {
+    try {
+      chunksRef.current = [];
+      setVideoBlob(null);
+      setError(null);
+      setTimeRemaining(maxDuration);
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      streamRef.current = stream;
+      
+      // Set recording state
+      setIsRecording(true);
+    } catch (error) {
+      setError(error instanceof Error ? error : new Error('Failed to start recording'));
+    }
+  };
+  
+  // Rest of the hook implementation...
+  
+  return {
+    isRecording,
+    timeRemaining,
+    videoBlob,
+    startRecording,
+    stopRecording: () => {}, // Implement this
+    error,
+  };
+}
+
+// Updated VideoRecorder.tsx
+import React from 'react';
+import { Button } from './Button';
+import { useVideoRecorder } from './useVideoRecorder';
+
+interface VideoRecorderProps {
+  onRecordingComplete: (blob: Blob) => void;
+  maxDuration?: number;
+}
+
+export const VideoRecorder: React.FC<VideoRecorderProps> = ({
+  onRecordingComplete,
+  maxDuration = 120,
+}) => {
+  const {
+    isRecording,
+    timeRemaining,
+    videoBlob,
+    startRecording,
+    stopRecording,
+    error,
+  } = useVideoRecorder({ maxDuration });
+  
+  // Updated component implementation using the hook...
+  
+  return (
+    <div>
+      {error && (
+        <div role="alert">{error.message}</div>
+      )}
+      
+      {isRecording && (
+        <div>Recording: {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}</div>
+      )}
+      
+      {!isRecording && !videoBlob && (
+        <Button onClick={startRecording}>Start Recording</Button>
+      )}
+      
+      {/* Rest of the component... */}
+    </div>
+  );
+};
+```
+
+## Testing Complex Scenarios
+
+### Testing Authentication
+
+Create a test authentication context for testing protected components:
+
+```typescript
+// src/context/__mocks__/AuthContext.tsx
+import React, { createContext, useContext, ReactNode } from 'react';
+
+interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (credentials: { email: string; password: string }) => Promise<void>;
+  logout: () => Promise<void>;
+  error: string | null;
+}
+
+const defaultContextValue: AuthContextType = {
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  login: async () => {},
+  logout: async () => {},
+  error: null,
+};
+
+const AuthContext = createContext<AuthContextType>(defaultContextValue);
+
+export const useAuth = () => useContext(AuthContext);
+
+interface MockAuthProviderProps {
+  children: ReactNode;
+  value?: Partial<AuthContextType>;
+}
+
+export const MockAuthProvider: React.FC<MockAuthProviderProps> = ({ 
+  children, 
+  value = {} 
+}) => {
+  const mockValue: AuthContextType = {
+    ...defaultContextValue,
+    ...value,
+  };
+  
+  return (
+    <AuthContext.Provider value={mockValue}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const AuthProvider = MockAuthProvider;
+```
+
+Test a protected route:
+
+```typescript
+// src/components/ProtectedRoute.test.tsx
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { ProtectedRoute } from './ProtectedRoute';
+import { MockAuthProvider } from '../context/__mocks__/AuthContext';
+
+jest.mock('../context/AuthContext', () => {
+  return require('../context/__mocks__/AuthContext');
+});
+
+describe('ProtectedRoute', () => {
+  it('renders children when user is authenticated', () => {
+    render(
+      <MockAuthProvider
+        value={{
+          isAuthenticated: true,
+          user: {
+            id: '1',
+            email: 'test@example.com',
+            firstName: 'Test',
+            lastName: 'User',
+            role: 'candidate',
+          },
+          isLoading: false,
+        }}
+      >
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Routes>
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <div>Protected Content</div>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </MockAuthProvider>
+    );
+    
+    expect(screen.getByText('Protected Content')).toBeInTheDocument();
+  });
+  
+  it('redirects to login when user is not authenticated', () => {
+    render(
+      <MockAuthProvider
+        value={{
+          isAuthenticated: false,
+          user: null,
+          isLoading: false,
+        }}
+      >
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Routes>
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <div>Protected Content</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/login" element={<div>Login Page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </MockAuthProvider>
+    );
+    
+    expect(screen.getByText('Login Page')).toBeInTheDocument();
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+  });
+  
+  it('shows loading state while checking authentication', () => {
+    render(
+      <MockAuthProvider
+        value={{
+          isAuthenticated: false,
+          user: null,
+          isLoading: true,
+        }}
+      >
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Routes>
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <div>Protected Content</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/login" element={<div>Login Page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </MockAuthProvider>
+    );
+    
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+    expect(screen.queryByText('Login Page')).not.toBeInTheDocument();
+  });
+});
+```
+
+### Testing Form Submissions
+
+Test complex form submissions with validation and API calls:
+
+```typescript
+// src/components/VideoResponseForm.test.tsx
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { VideoResponseForm } from './VideoResponseForm';
+import { useVideoRecorder } from '../hooks/useVideoRecorder';
+import { testService } from '../services/testService';
+
+// Mock hooks and services
+jest.mock('../hooks/useVideoRecorder');
+jest.mock('../services/testService');
+
+describe('VideoResponseForm', () => {
+  const mockOnComplete = jest.fn();
+  const mockVideoBlob = new Blob(['mock video data'], { type: 'video/webm' });
+  
+  beforeEach(() => {
+    jest.clearAllMocks();
+    
+    // Mock useVideoRecorder hook
+    (useVideoRecorder as jest.Mock).mockReturnValue({
+      isRecording: false,
+      timeRemaining: 0,
+      videoBlob: null,
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+      error: null,
+    });
+    
+    // Mock testService
+    (testService.uploadVideoResponse as jest.Mock).mockResolvedValue({
+      videoUrl: 'https://example.com/videos/response.webm',
+    });
+  });
+  
+  it('renders the initial recording UI', () => {
+    render(
+      <VideoResponseForm
+        questionId="q1"
+        sessionId="session1"
+        onComplete={mockOnComplete}
+      />
+    );
+    
+    expect(screen.getByText('Start Recording')).toBeInTheDocument();
+    expect(screen.getByText('Maximum recording time: 2 minutes')).toBeInTheDocument();
+  });
+  
+  it('shows recording UI when recording is in progress', () => {
+    (useVideoRecorder as jest.Mock).mockReturnValue({
+      isRecording: true,
+      timeRemaining: 90,
+      videoBlob: null,
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+      error: null,
+    });
+    
+    render(
+      <VideoResponseForm
+        questionId="q1"
+        sessionId="session1"
+        onComplete={mockOnComplete}
+      />
+    );
+    
+    expect(screen.getByText('Stop Recording')).toBeInTheDocument();
+    expect(screen.getByText('Time remaining: 1:30')).toBeInTheDocument();
+  });
+  
+  it('shows review UI when recording is complete', async () => {
+    (useVideoRecorder as jest.Mock).mockReturnValue({
+      isRecording: false,
+      timeRemaining: 0,
+      videoBlob: mockVideoBlob,
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+      error: null,
+    });
+    
+    render(
+      <VideoResponseForm
+        questionId="q1"
+        sessionId="session1"
+        onComplete={mockOnComplete}
+      />
+    );
+    
+    expect(screen.getByText('Review your response')).toBeInTheDocument();
+    expect(screen.getByText('Submit Response')).toBeInTheDocument();
+    expect(screen.getByText('Record Again')).toBeInTheDocument();
+  });
+  
+  it('uploads video and calls onComplete when submitting', async () => {
+    (useVideoRecorder as jest.Mock).mockReturnValue({
+      isRecording: false,
+      timeRemaining: 0,
+      videoBlob: mockVideoBlob,
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+      error: null,
+    });
+    
+    render(
+      <VideoResponseForm
+        questionId="q1"
+        sessionId="session1"
+        onComplete={mockOnComplete}
+      />
+    );
+    
+    // Click submit button
+    fireEvent.click(screen.getByText('Submit Response'));
+    
+    // Should show loading state
+    expect(screen.getByText('Uploading...')).toBeInTheDocument();
+    
+    // Wait for upload to complete
+    await waitFor(() => {
+      expect(testService.uploadVideoResponse).toHaveBeenCalledWith(
+        'q1',
+        'session1',
+        mockVideoBlob
+      );
+      expect(mockOnComplete).toHaveBeenCalledWith({
+        videoUrl: 'https://example.com/videos/response.webm',
+      });
+    });
+  });
+  
+  it('shows error message when upload fails', async () => {
+    (useVideoRecorder as jest.Mock).mockReturnValue({
+      isRecording: false,
+      timeRemaining: 0,
+      videoBlob: mockVideoBlob,
+      startRecording: jest.fn(),
+      stopRecording: jest.fn(),
+      error: null,
+    });
+    
+    // Mock upload failure
+    (testService.uploadVideoResponse as jest.Mock).mockRejectedValue(
+      new Error('Upload failed')
+    );
+    
+    render(
+      <VideoResponseForm
+        questionId="q1"
+        sessionId="session1"
+        onComplete={mockOnComplete}
+      />
+    );
+    
+    // Click submit button
+    fireEvent.click(screen.getByText('Submit Response'));
+    
+    // Wait for error message
+    await waitFor(() => {
+      expect(screen.getByText('Error: Upload failed')).toBeInTheDocument();
+      expect(screen.getByText('Try Again')).toBeInTheDocument();
+    });
+    
+    // Should not have called onComplete
+    expect(mockOnComplete).not.toHaveBeenCalled();
+  });
+});
+```
+
+## Performance Testing
+
+### Component Rendering Performance
+
+Test component rendering performance with React Profiler:
+
+```typescript
+// src/utils/performance.ts
+import { Profiler, ProfilerOnRenderCallback, ReactNode } from 'react';
+
+interface RenderMetrics {
+  id: string;
+  phase: 'mount' | 'update';
+  actualDuration: number;
+  baseDuration: number;
+  startTime: number;
+  commitTime: number;
+}
+
+export function measurePerformance(
+  Component: React.ComponentType<any>,
+  props: any,
+  iterations: number = 100
+): RenderMetrics[] {
+  const metrics: RenderMetrics[] = [];
+  
+  const onRender: ProfilerOnRenderCallback = (
+    id,
+    phase,
+    actualDuration,
+    baseDuration,
+    startTime,
+    commitTime
+  ) => {
+    metrics.push({
+      id,
+      phase: phase as 'mount' | 'update',
+      actualDuration,
+      baseDuration,
+      startTime,
+      commitTime,
+    });
+  };
+  
+  // Measure initial render
+  const { unmount } = render(
+    <Profiler id="test-mount" onRender={onRender}>
+      <Component {...props} />
+    </Profiler>
+  );
+  
+  unmount();
+  
+  // Measure updates
+  const { rerender, unmount: unmountUpdates } = render(
+    <Profiler id="test-update" onRender={onRender}>
+      <Component {...props} />
+    </Profiler>
+  );
+  
+  // Trigger multiple rerenders
+  for (let i = 0; i < iterations; i++) {
+    rerender(
+      <Profiler id="test-update" onRender={onRender}>
+        <Component {...props} key={i} />
+      </Profiler>
+    );
+  }
+  
+  unmountUpdates();
+  
+  return metrics;
+}
+```
+
+### React Query Performance Testing
+
+Test React Query caching and performance:
+
+```typescript
+// src/hooks/useTestSession.test.ts
+import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useTestSession } from './useTestSession';
+import { testService } from '../services/testService';
+
+// Mock the service
+jest.mock('../services/testService');
+
+describe('useTestSession', () => {
+  let queryClient: QueryClient;
+  
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+    
+    (testService.getTestSession as jest.Mock).mockResolvedValue({
+      id: 'session1',
+      day: 1,
+      status: 'in-progress',
+      currentSection: {
+        id: 'section1',
+        title: 'Foundational Knowledge',
+      },
+    });
+  });
+  
+  afterEach(() => {
+    jest.clearAllMocks();
+    queryClient.clear();
+  });
+  
+  it('fetches and caches test session data', async () => {
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    );
+    
+    // Initial render should trigger a fetch
+    const { result, rerender } = renderHook(() => useTestSession(), { wrapper });
+    
+    // Should be in loading state initially
+    expect(result.current.isLoading).toBe(true);
+    
+    // Wait for data to be loaded
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    
+    expect(result.current.data).toEqual({
+      id: 'session1',
+      day: 1,
+      status: 'in-progress',
+      currentSection: {
+        id: 'section1',
+        title: 'Foundational Knowledge',
+      },
+    });
+    
+    // Service should have been called once
+    expect(testService.getTestSession).toHaveBeenCalledTimes(1);
+    
+    // Rerender the hook
+    rerender();
+    
+    // Data should still be available and no additional fetch should occur
+    expect(result.current.data).toEqual({
+      id: 'session1',
+      day: 1,
+      status: 'in-progress',
+      currentSection: {
+        id: 'section1',
+        title: 'Foundational Knowledge',
+      },
+    });
+    
+    // Service should still have been called only once (cached data used)
+    expect(testService.getTestSession).toHaveBeenCalledTimes(1);
+  });
+  
+  it('refetches data when invalidated', async () => {
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    );
+    
+    const { result } = renderHook(() => useTestSession(), { wrapper });
+    
+    // Wait for initial data
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(testService.getTestSession).toHaveBeenCalledTimes(1);
+    
+    // Update the mock to return different data for the next call
+    (testService.getTestSession as jest.Mock).mockResolvedValue({
+      id: 'session1',
+      day: 1,
+      status: 'completed',
+      currentSection: null,
+    });
+    
+    // Invalidate the query
+    queryClient.invalidateQueries({ queryKey: ['test-session'] });
+    
+    // Wait for refetch to complete
+    await waitFor(() => {
+      expect(result.current.data).toEqual({
+        id: 'session1',
+        day: 1,
+        status: 'completed',
+        currentSection: null,
+      });
+    });
+    
+    // Service should have been called twice now
+    expect(testService.getTestSession).toHaveBeenCalledTimes(2);
+  });
+});
+```
+
+## Snapshot Testing
+
+Use snapshot testing for UI components to detect unexpected changes:
+
+```typescript
+// src/components/QuestionCard.test.tsx
+import React from 'react';
+import { render } from '@testing-library/react';
+import { QuestionCard } from './QuestionCard';
+
+describe('QuestionCard', () => {
+  it('renders multiple choice question correctly', () => {
+    const { container } = render(
+      <QuestionCard
+        question={{
+          id: 'q1',
+          type: 'multiple-choice',
+          content: 'What is the most important factor in SaaS valuation?',
+          options: [
+            'Monthly Recurring Revenue (MRR)',
+            'Customer Acquisition Cost (CAC)',
+            'Customer Lifetime Value (CLV)',
+            'Net Revenue Retention (NRR)',
+          ],
+        }}
+        onAnswer={jest.fn()}
+      />
+    );
+    
+    expect(container).toMatchSnapshot();
+  });
+  
+  it('renders text question correctly', () => {
+    const { container } = render(
+      <QuestionCard
+        question={{
+          id: 'q2',
+          type: 'text',
+          content: 'Explain how you would handle a difficult negotiation.',
+        }}
+        onAnswer={jest.fn()}
+      />
+    );
+    
+    expect(container).toMatchSnapshot();
+  });
+  
+  it('renders video question correctly', () => {
+    const { container } = render(
+      <QuestionCard
+        question={{
+          id: 'q3',
+          type: 'video',
+          content: 'Record your response to the following scenario.',
+        }}
+        onAnswer={jest.fn()}
+      />
+    );
+    
+    expect(container).toMatchSnapshot();
+  });
+});
+```
+
+## Visual Regression Testing
+
+Use Cypress and Percy for visual regression testing:
+
+```typescript
+// cypress/e2e/visual/dashboard.cy.ts
+describe('Dashboard Visual Tests', () => {
+  beforeEach(() => {
+    // Login and set up test session
+    cy.login('test@example.com', 'password123');
+  });
+  
+  it('dashboard should look correct', () => {
+    cy.visit('/dashboard');
+    
+    // Take a snapshot with Percy
+    cy.percySnapshot('Dashboard - Default');
+  });
+  
+  it('dashboard with active test session should look correct', () => {
+    // Mock API response for active test session
+    cy.intercept('GET', '/api/v1/test-sessions/current', {
+      statusCode: 200,
+      body: {
+        success: true,
+        data: {
+          id: 'session1',
+          day: 1,
+          status: 'in-progress',
+          currentSection: {
+            id: 'section1',
+            title: 'Foundational Knowledge',
+          },
+          progress: {
+            sectionsCompleted: 1,
+            totalSections: 3,
+          },
+        },
+      },
+    });
+    
+    cy.visit('/dashboard');
+    
+    // Take a snapshot with Percy
+    cy.percySnapshot('Dashboard - Active Session');
+  });
+  
+  it('dashboard with completed day 1 should look correct', () => {
+    // Mock API response for completed day 1
+    cy.intercept('GET', '/api/v1/test-sessions/current', {
+      statusCode: 200,
+      body: {
+        success: true,
+        data: {
+          id: 'session1',
+          day: 1,
+          status: 'completed',
+          currentSection: null,
+          progress: {
+            sectionsCompleted: 3,
+            totalSections: 3,
+          },
+        },
+      },
+    });
+    
+    cy.visit('/dashboard');
+    
+    // Take a snapshot with Percy
+    cy.percySnapshot('Dashboard - Day 1 Completed');
+  });
+});
+```
+
+## Accessibility Testing
+
+Test accessibility with jest-axe:
+
+```typescript
+// src/components/LoginForm.test.tsx
+import React from 'react';
+import { render } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
+import { LoginForm } from './LoginForm';
+
+// Add custom matchers
+expect.extend(toHaveNoViolations);
+
+describe('LoginForm accessibility', () => {
+  it('should have no accessibility violations', async () => {
+    const { container } = render(<LoginForm />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+});
+```
+
+## Test Data Management
+
+### Testing Fixtures
+
+Create fixtures for common test data:
+
+```typescript
+// src/tests/fixtures/users.ts
+export const users = {
+  admin: {
+    id: 'user1',
+    email: 'admin@quietlight.com',
+    firstName: 'Admin',
+    lastName: 'User',
+    role: 'admin',
+  },
+  candidate: {
+    id: 'user2',
+    email: 'test@example.com',
+    firstName: 'Test',
+    lastName: 'User',
+    role: 'candidate',
+  },
+};
+
+// src/tests/fixtures/testSessions.ts
+export const testSessions = {
+  day1Pending: {
+    id: 'session1',
+    day: 1,
+    status: 'pending',
+    sections: ['section1', 'section2', 'section3'],
+    progress: {
+      sectionsCompleted: 0,
+      totalSections: 3,
+    },
+  },
+  day1InProgress: {
+    id: 'session2',
+    day: 1,
+    status: 'in-progress',
+    currentSection: 'section1',
+    sections: ['section1', 'section2', 'section3'],
+    progress: {
+      sectionsCompleted: 0,
+      totalSections: 3,
+    },
+  },
+  day1Completed: {
+    id: 'session3',
+    day: 1,
+    status: 'completed',
+    sections: ['section1', 'section2', 'section3'],
+    progress: {
+      sectionsCompleted: 3,
+      totalSections: 3,
+    },
+  },
+};
+
+// src/tests/fixtures/questions.ts
+export const questions = {
+  multipleChoice: {
+    id: 'q1',
+    type: 'multiple-choice',
+    content: 'What is the most important factor in SaaS valuation?',
+    options: [
+      'Monthly Recurring Revenue (MRR)',
+      'Customer Acquisition Cost (CAC)',
+      'Customer Lifetime Value (CLV)',
+      'Net Revenue Retention (NRR)',
+    ],
+    correctOption: 3,
+  },
+  text: {
+    id: 'q2',
+    type: 'text',
+    content: 'Explain how you would handle a difficult negotiation.',
+  },
+  video: {
+    id: 'q3',
+    type: 'video',
+    content: 'Record your response to the following scenario.',
+  },
+};
+```
+
+### Test Factories
+
+Use factories to generate test data:
+
+```typescript
+// src/tests/factories/userFactory.ts
+import { faker } from '@faker-js/faker';
+
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: 'admin' | 'candidate';
+}
+
+export function createUser(overrides: Partial<User> = {}): User {
+  return {
+    id: faker.string.uuid(),
+    email: faker.internet.email(),
+    firstName: faker.person.firstName(),
+    lastName: faker.person.lastName(),
+    role: 'candidate',
+    ...overrides,
+  };
+}
+
+export function createUsers(count: number, overrides: Partial<User> = {}): User[] {
+  return Array.from({ length: count }, () => createUser(overrides));
+}
+
+// src/tests/factories/testSessionFactory.ts
+import { faker } from '@faker-js/faker';
+import { createSection } from './sectionFactory';
+
+export interface TestSession {
+  id: string;
+  user: string;
+  day: 1 | 2;
+  status: 'pending' | 'in-progress' | 'completed';
+  startDate: Date;
+  endDate?: Date;
+  currentSection?: string;
+  sections: string[];
+  progress: {
+    sectionsCompleted: number;
+    totalSections: number;
+  };
+}
+
+export function createTestSession(overrides: Partial<TestSession> = {}): TestSession {
+  const sections = overrides.sections || [
+    faker.string.uuid(),
+    faker.string.uuid(),
+    faker.string.uuid(),
+  ];
+  
+  const totalSections = sections.length;
+  const sectionsCompleted = overrides.progress?.sectionsCompleted ?? 0;
+  
+  return {
+    id: faker.string.uuid(),
+    user: faker.string.uuid(),
+    day: 1,
+    status: 'pending',
+    startDate: faker.date.recent(),
+    sections,
+    progress: {
+      sectionsCompleted,
+      totalSections,
+    },
+    ...overrides,
+  };
+}
+```
+
+## Test Documentation
+
+Document test cases with clear descriptions:
+
+```typescript
+// Example of well-documented test
+describe('AuthService', () => {
+  /**
+   * Test: User authentication with valid credentials
+   * 
+   * Purpose: Verify that a user can authenticate with valid credentials
+   * and receive the expected response with user data and tokens.
+   * 
+   * Steps:
+   * 1. Mock the API to return a successful response
+   * 2. Call login() with valid credentials
+   * 3. Verify the response contains user data and tokens
+   * 4. Verify the tokens are stored correctly
+   */
+  it('should authenticate a user with valid credentials', async () => {
+    // Test implementation...
+  });
+  
+  /**
+   * Test: User authentication with invalid credentials
+   * 
+   * Purpose: Verify that authentication fails with appropriate error
+   * when invalid credentials are provided.
+   * 
+   * Steps:
+   * 1. Mock the API to return an error response
+   * 2. Call login() with invalid credentials
+   * 3. Verify the function throws an error with the expected message
+   */
+  it('should reject authentication with invalid credentials', async () => {
+    // Test implementation...
+  });
+});
+```
+
+## Testing Best Practices
+
+### General Guidelines
+
+1. **Test behavior, not implementation**: Focus on what the component does, not how it does it.
+2. **Isolate tests**: Each test should be independent and not rely on the state from other tests.
+3. **Use meaningful assertions**: Make assertions that verify the expected behavior, not just that something renders.
+4. **Mock external dependencies**: Use mocks for API calls, timers, and other external dependencies.
+5. **Test both happy and error paths**: Verify that components handle errors gracefully.
+6. **Test accessibility**: Ensure components are accessible to all users.
+7. **Keep tests simple**: Write small, focused tests that test one thing at a time.
+8. **Follow AAA pattern**: Arrange, Act, Assert - structure tests clearly.
+
+### Code Quality
+
+1. **Follow DRY for test setup**: Extract common setup code into beforeEach or helper functions.
+2. **Avoid implementation details**: Don't test internal implementation details that may change.
+3. **Prefer realistic test data**: Use factories to generate realistic test data.
+4. **Test edge cases**: Consider and test boundary conditions and edge cases.
+5. **Clean up after tests**: Release resources and reset state in afterEach or afterAll blocks.
+
+### Test Maintenance
+
+1. **Update tests when requirements change**: Keep tests in sync with the code they're testing.
+2. **Refactor tests when code is refactored**: Tests should evolve with the codebase.
+3. **Monitor test performance**: Keep tests fast to encourage frequent testing.
+4. **Review test coverage regularly**: Identify and fill gaps in test coverage.
+5. **Avoid flaky tests**: Fix or isolate tests that fail intermittently.
+
+## Common Testing Patterns
+
+### Testing Asynchronous Code
+
+```typescript
+// Example of testing asynchronous code
+it('should fetch data asynchronously', async () => {
+  // Arrange
+  const mockData = { id: 1, name: 'Test' };
+  fetchMock.mockResponseOnce(JSON.stringify(mockData));
+  
+  // Act
+  const result = await fetchData();
+  
+  // Assert
+  expect(result).toEqual(mockData);
+});
+```
+
+### Testing Error Handling
+
+```typescript
+// Example of testing error handling
+it('should handle errors gracefully', async () => {
+  // Arrange
+  const errorMessage = 'Network error';
+  fetchMock.mockRejectOnce(new Error(errorMessage));
+  
+  // Act & Assert
+  await expect(fetchData()).rejects.toThrow(errorMessage);
+});
+```
+
+### Testing Component Lifecycle
+
+```typescript
+// Example of testing component lifecycle
+it('should clean up resources when unmounted', () => {
+  // Arrange
+  const clearIntervalSpy = jest.spyOn(window, 'clearInterval');
+  const { unmount } = render(<TimerComponent />);
+  
+  // Act
+  unmount();
+  
+  // Assert
+  expect(clearIntervalSpy).toHaveBeenCalled();
+});
+```
+
+### Testing Conditional Rendering
+
+```typescript
+// Example of testing conditional rendering
+it('should render loading state when isLoading is true', () => {
+  // Arrange & Act
+  render(<DataDisplay isLoading={true} data={null} />);
+  
+  // Assert
+  expect(screen.getByText('Loading...')).toBeInTheDocument();
+  expect(screen.queryByText('No data available')).not.toBeInTheDocument();
+});
+
+it('should render error state when there is an error', () => {
+  // Arrange & Act
+  render(<DataDisplay isLoading={false} data={null} error="Failed to load data" />);
+  
+  // Assert
+  expect(screen.getByText('Error: Failed to load data')).toBeInTheDocument();
+  expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+});
+
+it('should render data when available', () => {
+  // Arrange & Act
+  const testData = { name: 'Test Item' };
+  render(<DataDisplay isLoading={false} data={testData} />);
+  
+  // Assert
+  expect(screen.getByText('Test Item')).toBeInTheDocument();
+  expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+});
+```
+
+## Conclusion
+
+This document outlines the testing standards and best practices for the Quiet Light Advisor Aptitude Test application. Following these guidelines will ensure that the application is thoroughly tested, reliable, and maintainable.
+
+Key takeaways:
+
+1. Use the appropriate testing tools and frameworks for each type of test
+2. Write tests at multiple levels (unit, integration, end-to-end)
+3. Follow test-driven development practices
+4. Test for accessibility and performance
+5. Use realistic test data and mock external dependencies
+6. Document tests clearly
+7. Keep tests maintainable and up-to-date
+8. Monitor test coverage and quality# Testing Rules
+
+## Overview
+
+This document outlines the testing standards and best practices for the Quiet Light Advisor Aptitude Test application. Comprehensive testing is critical to ensure the application functions correctly across all components.
+
+## Testing Stack
+
+### Frontend Testing
+
+- **Jest**: Core testing framework
+- **React Testing Library**: Component testing
+- **Mock Service Worker (MSW)**: API mocking
+- **Cypress**: End-to-end testing
+
+### Backend Testing
+
+- **Jest**: Core testing framework
+- **Supertest**: API endpoint testing
+- **MongoDB Memory Server**: In-memory database for tests
+
+## Test Types and Organization
+
+### Unit Tests
+
+Unit tests should focus on testing individual functions and components in isolation:
+
+```
+src/
+├── components/
+│   ├── Button/
+│   │   ├── Button.tsx
+│   │   ├── Button.types.ts
+│   │   └── Button.test.tsx  # Component unit test
+├── utils/
+│   ├── formatters.ts
+│   └── formatters.test.ts   # Utility unit test
+```
+
+### Integration Tests
+
+Integration tests should verify that different parts of the application work together correctly:
+
+```
+src/
+├── __tests__/
+│   ├── integration/
+│   │   ├── api/
+│   │   │   ├── auth.test.ts
+│   │   │   └── testSessions.test.ts
+│   │   └── forms/
+│   │       └── LoginForm.test.tsx
+```
+
+### End-to-End Tests
+
+End-to-end tests should validate complete user flows through the application:
+
+```
+cypress/
+├── e2e/
+│   ├── auth/
+│   │   ├── login.cy.ts
+│   │   └── logout.cy.ts
+│   └── test/
+│       ├── day1_completion.cy.ts
+│       └── day2_completion.cy.ts
+```
+
+## Test File Naming and Structure
+
+### Naming Conventions
+
+- Test files should use the same name as the file they're testing with a `.test.ts` or `.test.tsx` suffix
+- End-to-end test files should use a `.cy.ts` suffix
+- Test files should be co-located with the code they're testing when possible
+
+### Test Structure
+
+Each test file should follow this structure:
+
+```typescript
+// Import the component/function being tested
+import { Component } from './Component';
+// Import testing utilities
+import { render, screen, fireEvent } from '@testing-library/react';
+
+// Describe block for the component/function
+describe('Component', () => {
+  // Setup/teardown if needed
+  beforeEach(() => {
+    // Setup code
+  });
+  
+  afterEach(() => {
+    // Teardown code
+  });
+  
+  // Individual test cases
+  it('should render correctly', () => {
+    // Test code
+  });
+  
+  it('should handle user interaction', () => {
+    // Test code
+  });
+  
+  // Nested describe blocks for grouping related tests
+  describe('when in loading state', () => {
+    it('should show loading indicator', () => {
+      // Test code
+    });
+  });
+});
+```
+
+## Frontend Testing Guidelines
+
+### Component Testing
+
+Use React Testing Library to test components:
+
+```typescript
+// Button.test.tsx
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { Button } from './Button';
+
+describe('Button', () => {
+  it('renders with text', () => {
+    render(<Button>Click me</Button>);
+    expect(screen.getByText('Click me')).toBeInTheDocument();
+  });
+  
+  it('calls onClick handler when clicked', () => {
+    const handleClick = jest.fn();
+    render(<Button onClick={handleClick}>Click me</Button>);
+    
+    fireEvent.click(screen.getByText('Click me'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+  
+  it('is disabled when disabled prop is true', () => {
+    render(<Button disabled>Click me</Button>);
+    expect(screen.getByText('Click me')).toBeDisabled();
+  });
+  
+  it('renders loading state correctly', () => {
+    render(<Button isLoading>Click me</Button>);
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Click me')).not.toBeInTheDocument();
+  });
+});
+```
+
+### Form Testing
+
+Test form components with user interactions:
+
+```typescript
+// LoginForm.test.tsx
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { LoginForm } from './LoginForm';
+import { useAuth } from '../../hooks/useAuth';
+
+// Mock the auth hook
+jest.mock('../../hooks/useAuth', () => ({
+  useAuth: jest.fn(),
+}));
+
+describe('LoginForm', () => {
+  beforeEach(() => {
+    (useAuth as jest.Mock).mockReturnValue({
+      login: jest.fn().mockResolvedValue(undefined),
+      isLoading: false,
+      error: null,
+    });
+  });
+  
+  it('submits the form with user credentials', async () => {
+    const mockLogin = jest.fn().mockResolvedValue(undefined);
+    (useAuth as jest.Mock).mockReturnValue({
+      login: mockLogin,
+      isLoading: false,
+      error: null,
+    });
+    
+    render(<LoginForm />);
+    
+    // Fill out the form
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'test@example.com' },
+    });
+    
+    fireEvent.change(screen.getByLabelText(/password/i), {
+      target: { value: 'password123' },
+    });
+    
+    // Submit the form
+    fireEvent.click(screen.getByRole('button', { name: /login/i }));
+    
+    // Check that login was called with the correct values
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith({
+        email: 'test@example.com',
+        password: 'password123',
+      });
+    });
+  });
+  
+  it('displays validation errors for invalid inputs', async () => {
+    render(<LoginForm />);
+    
+    // Submit form without inputs
+    fireEvent.click(screen.getByRole('button', { name: /login/i }));
+    
+    // Check for validation errors
+    await waitFor(() => {
+      expect(screen.getByText(/email is required/i)).toBeInTheDocument();
+      expect(screen.getByText(/password is required/i)).toBeInTheDocument();
+    });
+  });
+  
+  it('displays error message when login fails', async () => {
+    const mockLogin = jest.fn().mockRejectedValue(new Error('Invalid credentials'));
+    (useAuth as jest.Mock).mockReturnValue({
+      login: mockLogin,
+      isLoading: false,
+      error: 'Invalid credentials',
+    });
+    
+    render(<LoginForm />);
+    
+    // Fill out and submit the form
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'test@example.com' },
+    });
+    
+    fireEvent.change(screen.getByLabelText(/password/i), {
+      target: { value: 'password123' },
+    });
+    
+    fireEvent.click(screen.getByRole('button', { name: /login/i }));
+    
+    // Check for error message
+    await waitFor(() => {
+      expect(screen.getByText(/invalid credentials/i)).toBeInTheDocument();
+    });
+  });
+});
+```
+
+### API Mocking
+
+Use Mock Service Worker (MSW) to mock API calls:
+
+```typescript
+// src/mocks/handlers.ts
+import { rest } from 'msw';
+
+export const handlers = [
+  rest.post('/api/v1/auth/login', (req, res, ctx) => {
+    const { email, password } = req.body as { email: string; password: string };
+    
+    if (email === 'test@example.com' && password === 'password123') {
+      return res(
+        ctx.status(200),
+        ctx.json({
+          success: true,
+          data: {
+            user: {
+              id: '1',
+              email: 'test@example.com',
+              firstName: 'Test',
+              lastName: 'User',
+              role: 'candidate',
+            },
+            tokens: {
+              accessToken: 'mock-access-token',
+              refreshToken: 'mock-refresh-token',
+            },
+          },
+        })
+      );
+    }
+    
+    return res(
+      ctx.status(401),
+      ctx.json({
+        success: false,
+        error: {
+          code: 'INVALID_CREDENTIALS',
+          message: 'Invalid email or password',
+        },
+      })
+    );
+  }),
+  
+  rest.get('/api/v1/test-sessions/current', (req, res, ctx) => {
+    return res(
+      ctx.status(200),
+      ctx.json({
+        success: true,
+        data: {
+          id: '1',
+          status: 'in-progress',
+          day: 1,
+          currentSection: {
+            id: '1',
+            title: 'Foundational Knowledge',
+            timeRemaining: 1800,
+          },
+          progress: {
+            sectionsCompleted: 0,
+            totalSections: 3,
+          },
+        },
+      })
+    );
+  }),
+];
+
+// src/mocks/server.ts
+import { setupServer } from 'msw/node';
+import { handlers } from './handlers';
+
+export const server = setupServer(...handlers);
+
+// src/setupTests.ts
+import '@testing-library/jest-dom';
+import { server } from './mocks/server';
+
+// Enable API mocking before tests
+beforeAll(() => server.listen());
+
+// Reset request handlers after each test
+afterEach(() => server.resetHandlers());
+
+// Clean up after all tests
+afterAll(() => server.close());
+```
+
+### Custom Render Function
+
+Create a custom render function for components that require context providers:
+
+```typescript
+// src/utils/test-utils.tsx
+import React, { ReactElement } from 'react';
+import { render, RenderOptions } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from '../context/AuthContext';
+
+const AllProviders = ({ children }: { children: React.ReactNode }) => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>{children}</BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+};
+
+const customRender = (
+  ui: ReactElement,
+  options?: Omit<RenderOptions, 'wrapper'>,
+) => render(ui, { wrapper: AllProviders, ...options });
+
+// Re-export everything from testing-library
+export * from '@testing-library/react';
+
+// Override render method
+export { customRender as render };
+```
+
+## Backend Testing Guidelines
+
+### API Endpoint Testing
+
+Use Supertest to test API endpoints:
+
+```typescript
+// src/__tests__/api/auth.test.ts
+import request from 'supertest';
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import app from '../../app';
+import { User } from '../../models/User';
+
+describe('Auth API', () => {
+  let mongoServer: MongoMemoryServer;
+  
+  beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create();
+    const uri = mongoServer.getUri();
+    await mongoose.connect(uri);
+  });
+  
+  afterAll(async () => {
+    await mongoose.disconnect();
+    await mongoServer.stop();
+  });
+  
+  beforeEach(async () => {
+    // Clear users collection before each test
+    await User.deleteMany({});
+    
+    // Create a test user
+    await User.create({
+      email: 'test@example.com',
+      password: 'password123', // This will be hashed by the pre-save hook
+      firstName: 'Test',
+      lastName: 'User',
+      role: 'candidate',
+    });
+  });
+  
+  describe('POST /api/v1/auth/login', () => {
+    it('should login a user with valid credentials', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'password123',
+        });
+      
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toHaveProperty('tokens');
+      expect(res.body.data).toHaveProperty('user');
+      expect(res.body.data.user.email).toBe('test@example.com');
+      expect(res.body.data.user).not.toHaveProperty('password');
+    });
+    
+    it('should return 401 with invalid credentials', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'wrongpassword',
+        });
+      
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('INVALID_CREDENTIALS');
+    });
+    
+    it('should validate request body', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'invalid-email',
+          password: '',
+        });
+      
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
+  });
+  
+  describe('GET /api/v1/auth/me', () => {
+    it('should return user data when authenticated', async () => {
+      // First login to get a token
+      const loginRes = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'password123',
+        });
+      
+      const token = loginRes.body.data.tokens.accessToken;
+      
+      // Then use that token to access protected route
+      const res = await request(app)
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+      
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.email).toBe('test@example.com');
+    });
+    
+    it('should return 401 when not authenticated', async () => {
+      const res = await request(app).get('/api/v1/auth/me');
+      
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('UNAUTHORIZED');
+    });
+  });
+});
+```
+
+### Service Layer Testing
+
+Test service functions in isolation:
+
+```typescript
+// src/services/__tests__/testService.test.ts
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import { TestSession } from '../../models/TestSession';
+import { Section } from '../../models/Section';
+import { User } from '../../models/User';
+import { testService } from '../testService';
+
+describe('Test Service', () => {
+  let mongoServer: MongoMemoryServer;
+  let user: any;
+  let section1: any;
+  let section2: any;
+  
+  beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create();
+    const uri = mongoServer.getUri();
+    await mongoose.connect(uri);
+  });
+  
+  afterAll(async () => {
+    await mongoose.disconnect();
+    await mongoServer.stop();
+  });
+  
+  beforeEach(async () => {
+    // Clear collections
+    await TestSession.deleteMany({});
+    await Section.deleteMany({});
+    await User.deleteMany({});
+    
+    // Create test data
+    user = await User.create({
+      email: 'test@example.com',
+      password: 'password123',
+      firstName: 'Test',
+      lastName: 'User',
+      role: 'candidate',
+    });
+    
+    section1 = await Section.create({
+      title: 'Foundational Knowledge',
+      description: 'Test your knowledge of business brokerage concepts',
+      type: 'multiple-choice',
+      day: 1,
+      order: 1,
+    });
+    
+    section2 = await Section.create({
+      title: 'Negotiation Simulation',
+      description: 'Respond to a negotiation scenario',
+      type: 'negotiation',
+      day: 1,
+      order: 2,
+    });
+  });
+  
+  describe('createTestSession', () => {
+    it('should create a new test session', async () => {
+      const session = await testService.createTestSession(user._id, 1);
+      
+      expect(session).toBeDefined();
+      expect(session.user.toString()).toBe(user._id.toString());
+      expect(session.day).toBe(1);
+      expect(session.status).toBe('pending');
+    });
+    
+    it('should throw an error if user already has an active session for the day', async () => {
+      // Create a session first
+      await TestSession.create({
+        user: user._id,
+        day: 1,
+        status: 'in-progress',
+        sections: [section1._id, section2._id],
+        progress: {
+          sectionsCompleted: 0,
+          totalSections: 2,
+        },
+      });
+      
+      // Try to create another session for the same day
+      await expect(testService.createTestSession(user._id, 1))
+        .rejects
+        .toThrow('User already has an active session for day 1');
+    });
+  });
+  
+  describe('startSection', () => {
+    it('should update the test session with the current section', async () => {
+      // Create a session
+      const session = await TestSession.create({
+        user: user._id,
+        day: 1,
+        status: 'pending',
+        sections: [section1._id, section2._id],
+        progress: {
+          sectionsCompleted: 0,
+          totalSections: 2,
+        },
+      });
+      
+      // Start the first section
+      const updatedSession = await testService.startSection(
+        session._id.toString(),
+        section1._id.toString()
+      );
+      
+      expect(updatedSession.status).toBe('in-progress');
+      expect(updatedSession.currentSection.toString()).toBe(section1._id.toString());
+    });
+    
+    it('should throw an error if the section is not part of the session', async () => {
+      // Create a session
+      const session = await TestSession.create({
+        user: user._id,
+        day: 1,
+        status: 'pending',
+        sections: [section1._id], // Only section1 is part of this session
+        progress: {
+          sectionsCompleted: 0,
+          totalSections: 1,
+        },
+      });
+      
+      // Try to start section2
+      await expect(testService.startSection(
+        session._id.toString(),
+        section2._id.toString()
+      ))
+        .rejects
+        .toThrow('Section is not part of this test session');
+    });
+  });
+  
+  // Add more tests for other service functions
+});
+```
+
+## End-to-End Testing Guidelines
+
+### Test Structure
+
+Structure Cypress tests with page objects for better maintainability:
+
+```typescript
+// cypress/support/page-objects/login.page.ts
+export class LoginPage {
+  visit() {
+    cy.visit('/login');
+    return this;
+  }
+  
+  fillEmail(email: string) {
+    cy.get('[data-testid=email-input]').type(email);
+    return this;
+  }
+  
+  fillPassword(password: string) {
+    cy.get('[data-testid=password-input]').type(password);
+    return this;
+  }
+  
+  submit() {
+    cy.get('[data-testid=login-button]').click();
+    return this;
+  }
+  
+  getErrorMessage() {
+    return cy.get('[data-testid=error-message]');
+  }
+}
+
+// cypress/e2e/auth/login.cy.ts
+import { LoginPage } from '../../support/page-objects/login.page';
+
+describe('Login Page', () => {
+  const loginPage = new LoginPage();
+  
+  beforeEach(() => {
+    // Intercept API calls
+    cy.intercept('POST', '/api/v1/auth/login').as('loginRequest');
+    // Visit login page
+    loginPage.visit();
+  });
+  
+  it('should login successfully with valid credentials', () => {
+    // Mock successful login response
+    cy.intercept('POST', '/api/v1/auth/login', {
+      statusCode: 200,
+      body: {
+        success: true,
+        data: {
+          user: {
+            id: '1',
+            email: 'test@example.com',
+            firstName: 'Test',
+            lastName: 'User',
+            role: 'candidate',
+          },
+          tokens: {
+            accessToken: 'mock-token',
+            refreshToken: 'mock-refresh-token',
+          },
+        },
+      },
+    }).as('loginSuccess');
+    
+    // Fill and submit login form
+    loginPage
+      .fillEmail('test@example.com')
+      .fillPassword('password123')
+      .submit();
+    
+    // Wait for API call to complete
+    cy.wait('@loginSuccess');
+    
+    // Verify redirect to dashboard
+    cy.url().should('include', '/dashboard');
+    cy.contains('Welcome, Test').should('be.visible');
+  });
+  
+  it('should show error message with invalid credentials', () => {
+    // Mock failed login response
+    cy.intercept('POST', '/api/v1/auth/login', {
+      statusCode: 401,
+      body: {
+        success: false,
+        error: {
+          code: 'INVALID_CREDENTIALS',
+          message: 'Invalid email or password',
+        },
+      },
+    }).as('loginFailure');
+    
+    // Fill and submit login form
+    loginPage
+      .fillEmail('test@example.com')
+      .fillPassword('wrongpassword')
+      .submit();
+    
+    // Wait for API call to complete
+    cy.wait('@loginFailure');
+    
+    // Verify error message
+    loginPage
+      .getErrorMessage()
+      .should('be.visible')
+      .and('contain.text', 'Invalid email or password');
+    
+    // Verify we stay on login page
+    cy.url().should('include', '/login');
+  });
+});
+```
+
+### Test Custom Commands
+
+Create custom Cypress commands for common operations:
+
+```typescript
+// cypress/support/commands.ts
+declare global {
+  namespace Cypress {
+    interface Chainable {
+      login(email: string, password: string): Chainable<void>;
+      setupTestSession(day: number): Chainable<string>;
+    }
+  }
+}
+
+// Custom command to login
+Cypress.Commands.add('login', (email, password) => {
+  // Intercept the login request
+  cy.intercept('POST', '/api/v1/auth/login').as('loginRequest');
+  
+  // Visit login page and submit credentials
+  cy.visit('/login');
+  cy.get('[data-testid=email-input]').type(email);
+  cy.get('[data-testid=password-input]').type(password);
+  cy.get('[data-testid=login-button]').click();
+  
+  // Wait for login to complete
+  cy.wait('@loginRequest');
+  
+  // Verify redirect to dashboard
+  cy.url().should('include', '/dashboard');
+});
+
+// Custom command to setup a test session
+Cypress.Commands.add('setupTestSession', (day) => {
+  // Mock API response for creating a test session
+  cy.intercept('POST', '/api/v1/test-sessions', {
+    statusCode: 200,
+    body: {
+      success: true,
+      data: {
+        id: 'test-session-id',
+        day,
+        status: 'pending',
+        sections: [
+          {
+            id: 'section-1',
+            title: 'Foundational Knowledge',
+            type: 'multiple-choice',
+          },
+          {
+            id: 'section-2',
+            title: 'Negotiation Simulation',
+            type: 'negotiation',
+          },
+        ],
+        progress: {
+          sectionsCompleted: 0,
+          totalSections: 2,
+        },
+      },
+    },
+  }).as('createSession');
+  
+  // Visit dashboard and create a new test session
+  cy.visit('/dashboard');
+  cy.get(`[data-testid=start-day-${day}-button]`).click();
+  
+  // Wait for session creation
+  cy.wait('@createSession');
+  
+  // Return the session ID
+  return cy.wrap('test-session-id');
+});
+```
+
+### Testing Complete User Flows
+
+Test entire user journeys through the application:
+
+```typescript
+// cypress/e2e/test/day1_completion.cy.ts
+describe('Day 1 Test Completion', () => {
+  beforeEach(() => {
+    // Login before each test
+    cy.login('test@example.com', 'password123');
+  });
+  
+  it('should complete all sections of day 1 test', () => {
+    // Setup test session
+    cy.setupTestSession(1).then((sessionId) => {
+      // Mock API responses for sections
+      cy.intercept('GET', `/api/v1/sections/section-1/questions`, {
+        statusCode: 200,
+        body: {
+          success: true,
+          data: [
+            {
+              id: 'q1',
+              type: 'multiple-choice',
+              content: 'Sample question 1',
+              options: ['Option A', 'Option B', 'Option C', 'Option D'],
+            },
+            {
+              id: 'q2',
+              type: 'multiple-choice',
+              content: 'Sample question 2',
+              options: ['Option A', 'Option B', 'Option C', 'Option D'],
+            },
+          ],
+        },
+      }).as('getQuestions1');
+      
+      cy.intercept('GET', `/api/v1/sections/section-2/questions`, {
+        statusCode: 200,
+        body: {
+          success: true,
+          data: [
+            {
+              id: 'q3',
+              type: 'negotiation',
+              content: 'Sample negotiation scenario',
+            },
+          ],
+        },
+      }).as('getQuestions2');
+      
+      // Mock starting sections
+      cy.intercept('POST', `/api/v1/sections/section-1/start`, {
+        statusCode: 200,
+        body: {
+          success: true,
+          data: {
+            sessionId,
+            sectionId: 'section-1',
+            timeRemaining: 1800, // 30 minutes
+          },
+        },
+      }).as('startSection1');
+      
+      cy.intercept('POST', `/api/v1/sections/section-2/start`, {
+        statusCode: 200,
+        body: {
+          success: true,
+          data: {
+            sessionId,
+            sectionId: 'section-2',
+            timeRemaining: 300, // 5 minutes
+          },
+        },
+      }).as('startSection2');
+      
+      // Mock submitting answers
+      cy.intercept('POST', `/api/v1/sections/section-1/answers`, {
+        statusCode: 200,
+        body: {
+          success: true,
+          data: {
+            sessionId,
+            sectionCompleted: true,
+            nextSection: 'section-2',
+          },
+        },
+      }).as('submitAnswers1');
+      
+      cy.intercept('POST', `/api/v1/sections/section-2/answers`, {
+        statusCode: 200,
+        body: {
+          success: true,
+          data: {
+            sessionId,
+            sectionCompleted: true,
+            testCompleted: true,
+          },
+        },
+      }).as('submitAnswers2');
+      
+      // Start the test
+      cy.get('[data-testid=begin-test-button]').click();
+      
+      // Wait for first section to load
+      cy.wait('@startSection1');
+      cy.wait('@getQuestions1');
+      
+      // Complete multiple choice questions
+      cy.get('[data-testid=question-0]').should('be.visible');
+      cy.get('[data-testid=question-0-option-0]').click();
+      
+      cy.get('[data-testid=question-1]').should('be.visible');
+      cy.get('[data-testid=question-1-option-1]').click();
+      
+      // Submit section 1
+      cy.get('[data-testid=submit-section-button]').click();
+      cy.wait('@submitAnswers1');
+      
+      // Start section 2
+      cy.get('[data-testid=continue-button]').click();
+      cy.wait('@startSection2');
+      cy.wait('@getQuestions2');
+      
+      // Complete negotiation question
+      cy.get('[data-testid=negotiation-textarea]').should('be.visible');
+      cy.get('[data-testid=negotiation-textarea]').type('This is my response to the negotiation scenario. I would handle this by...');
+      
+      // Submit section 2
+      cy.get('[data-testid=submit-section-button]').click();
+      cy.wait('@submitAnswers2');
+      
+      // Verify test completion
+      cy.get('[data-testid=day-1-completed]').should('be.visible');
+      cy.get('[data-testid=completion-message]').should('contain.text', 'Day 1 completed successfully');
+    });
+  });
+});
+```
+
+## Test Coverage
+
+### Coverage Requirements
+
+Aim for the following minimum test coverage:
+
+- **Unit Tests**: 80% coverage for utilities and individual components
+- **Integration Tests**: 70% coverage for forms, API interactions, and complex components
+- **End-to-End Tests**: Cover all critical user flows
+
+### Coverage Reporting
+
+Configure Jest to generate coverage reports:
+
+```json
+// jest.config.js
+module.exports = {
+  // Other Jest configuration
+  collectCoverage: true,
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'clover'],
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/mocks/**',
+    '!src/**/*.stories.{ts,tsx}',
+    '!src/index.tsx',
+    '!src/serviceWorker.ts'
+  ],
+  coverageThreshold: {
+    global: {
+      statements: 70,
+      branches: 60,
+      functions: 70,
+      lines: 70
+    },
+    'src/utils/**/*.ts': {
+      statements: 80,
+      branches: 70,
+      functions: 80,
+      lines: 80
+    },
+    'src/components/ui/**/*.tsx': {
+      statements: 80,
+      branches: 70,
+      functions: 80,
+      lines: 80
+    }
+  }
+};
+```
+
+## Continuous Integration# Testing Rules
+
+## Overview
+
+This document outlines the testing standards and best practices for the Quiet Light Advisor Aptitude Test application. Comprehensive testing is critical to ensure the application functions correctly across all components.
+
+## Testing Stack
+
+### Frontend Testing
+
+- **Jest**: Core testing framework
+- **React Testing Library**: Component testing
+- **Mock Service Worker (MSW)**: API mocking
+- **Cypress**: End-to-end testing

@@ -1,0 +1,553 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Database Migrations Rules
+
+## Overview
+
+This document outlines the rules and best practices for database migrations in the Quiet Light Advisor Aptitude Test application. Migrations are critical for maintaining database schema changes over time and ensuring consistent database states across environments.
+
+## Migration Implementation
+
+### Migration Framework
+
+Use MongoDB's native migration capabilities with the `migrate-mongo` package:
+
+```typescript
+// Install the package
+// npm install migrate-mongo --save-dev
+```
+
+### Migration Directory Structure
+
+```
+migrations/
+├── migrate-mongo-config.js  # Migration configuration
+└── migrations/              # Migration files
+    ├── 20250401000000-create-users.js
+    ├── 20250401000100-create-test-sessions.js
+    └── ...
+```
+
+### Configuration
+
+```javascript
+// migrate-mongo-config.js
+const config = {
+  mongodb: {
+    url: process.env.MONGODB_URI || 'mongodb://localhost:27017',
+    databaseName: 'quiet-light-test',
+    options: {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    }
+  },
+  migrationsDir: 'migrations/migrations',
+  changelogCollectionName: 'changelog',
+  migrationFileExtension: '.js',
+  useFileHash: false,
+  moduleSystem: 'commonjs',
+};
+
+module.exports = config;
+```
+
+## Migration File Format
+
+Each migration should follow this pattern:
+
+```javascript
+// migrations/migrations/20250401000000-create-users.js
+module.exports = {
+  async up(db, client) {
+    // Create collections
+    await db.createCollection('users', {
+      validator: {
+        $jsonSchema: {
+          bsonType: 'object',
+          required: ['email', 'password', 'firstName', 'lastName', 'role'],
+          properties: {
+            email: {
+              bsonType: 'string',
+              description: 'Email must be a string and is required'
+            },
+            password: {
+              bsonType: 'string',
+              description: 'Password must be a string and is required'
+            },
+            firstName: {
+              bsonType: 'string',
+              description: 'First name must be a string and is required'
+            },
+            lastName: {
+              bsonType: 'string',
+              description: 'Last name must be a string and is required'
+            },
+            role: {
+              enum: ['candidate', 'admin'],
+              description: 'Role must be either candidate or admin and is required'
+            }
+          }
+        }
+      }
+    });
+
+    // Create indexes
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+    
+    // Insert initial data if needed
+    await db.collection('users').insertOne({
+      email: 'admin@quietlight.com',
+      // Note: In a real migration, this would be a hashed password
+      password: '$2b$10$X7o.KQCXJjnBkZNjwXJ4QOPyRfZCDOKSnWG.7r3ExyYUKVEirTUVu', // "password123"
+      firstName: 'Admin',
+      lastName: 'User',
+      role: 'admin',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+  },
+
+  async down(db, client) {
+    // Drop indexes
+    await db.collection('users').dropIndex({ email: 1 });
+    
+    // Drop collections
+    await db.collection('users').drop();
+  }
+};
+```
+
+## Migration Best Practices
+
+### General Guidelines
+
+1. **Atomic Changes**: Each migration should make one logical change to the database schema.
+2. **Reversibility**: Always implement the `down` function to allow rollbacks.
+3. **Idempotency**: Migrations should be idempotent - running the same migration multiple times should not cause errors.
+4. **Testing**: Test migrations in development environment before running in production.
+5. **Comments**: Include clear comments explaining the purpose of the migration and any potential risks.
+
+### Naming Convention
+
+Use a timestamp-based naming convention for migration files:
+
+```
+YYYYMMDDHHMMSS-descriptive-name.js
+```
+
+For example:
+```
+20250401000000-create-users.js
+20250401000100-create-test-sessions.js
+```
+
+### Data Migrations
+
+When migrating data (not just schema), follow these guidelines:
+
+1. **Batching**: Process data in batches to avoid memory issues with large datasets.
+2. **Progress Logging**: Log progress for long-running migrations.
+3. **Error Handling**: Implement robust error handling to prevent partial migrations.
+
+Example data migration:
+
+```javascript
+// migrations/migrations/20250402000000-add-scores-to-answers.js
+module.exports = {
+  async up(db, client) {
+    const cursor = db.collection('answers').find({ score: { $exists: false } });
+    
+    let count = 0;
+    const batchSize = 100;
+    
+    let batch = [];
+    
+    while (await cursor.hasNext()) {
+      const answer = await cursor.next();
+      batch.push({
+        updateOne: {
+          filter: { _id: answer._id },
+          update: { $set: { score: 0, scoredBy: null, scoringNotes: '' } }
+        }
+      });
+      
+      count++;
+      
+      if (batch.length === batchSize) {
+        console.log(`Processing batch of ${batch.length} documents (${count} total)`);
+        await db.collection('answers').bulkWrite(batch);
+        batch = [];
+      }
+    }
+    
+    if (batch.length > 0) {
+      console.log(`Processing final batch of ${batch.length} documents (${count} total)`);
+      await db.collection('answers').bulkWrite(batch);
+    }
+    
+    console.log(`Completed migration: ${count} documents updated`);
+  },
+
+  async down(db, client) {
+    await db.collection('answers').updateMany(
+      {},
+      { $unset: { score: "", scoredBy: "", scoringNotes: "" } }
+    );
+  }
+};
+```
+
+## Index Changes
+
+When changing indexes, consider performance implications:
+
+```javascript
+// migrations/migrations/20250403000000-optimize-test-session-queries.js
+module.exports = {
+  async up(db, client) {
+    // Create index
+    console.log('Creating compound index on testSessions collection...');
+    await db.collection('testSessions').createIndex(
+      { user: 1, status: 1, day: 1 },
+      { name: 'user_status_day_idx' }
+    );
+    console.log('Index created successfully');
+  },
+
+  async down(db, client) {
+    // Drop index
+    console.log('Dropping compound index from testSessions collection...');
+    await db.collection('testSessions').dropIndex('user_status_day_idx');
+    console.log('Index dropped successfully');
+  }
+};
+```
+
+## Schema Validation Changes
+
+When updating schema validation rules:
+
+```javascript
+// migrations/migrations/20250404000000-update-question-validation.js
+module.exports = {
+  async up(db, client) {
+    await db.command({
+      collMod: 'questions',
+      validator: {
+        $jsonSchema: {
+          bsonType: 'object',
+          required: ['type', 'content'],
+          properties: {
+            type: {
+              enum: [
+                'multiple-choice', 
+                'text', 
+                'video', 
+                'forced-choice', 
+                'likert', 
+                'open-ended'
+              ],
+              description: 'Type must be one of the predefined values and is required'
+            },
+            content: {
+              bsonType: 'string',
+              description: 'Content must be a string and is required'
+            },
+            options: {
+              bsonType: 'array',
+              description: 'Options must be an array if provided',
+              items: {
+                bsonType: 'string'
+              }
+            },
+            correctOption: {
+              bsonType: 'int',
+              description: 'CorrectOption must be an integer if provided'
+            },
+            scoringRubric: {
+              bsonType: 'object',
+              description: 'ScoringRubric must be an object if provided',
+              properties: {
+                criteria: { bsonType: 'string' },
+                levels: {
+                  bsonType: 'array',
+                  items: {
+                    bsonType: 'object',
+                    required: ['score', 'description'],
+                    properties: {
+                      score: { bsonType: 'int' },
+                      description: { bsonType: 'string' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      validationLevel: 'moderate', // Use 'moderate' to apply validation only to new or updated documents
+      validationAction: 'error'    // Reject invalid documents
+    });
+  },
+
+  async down(db, client) {
+    // Revert to previous validation schema
+    await db.command({
+      collMod: 'questions',
+      validator: {
+        $jsonSchema: {
+          bsonType: 'object',
+          required: ['type', 'content'],
+          properties: {
+            type: {
+              enum: ['multiple-choice', 'text', 'video', 'forced-choice', 'likert', 'open-ended'],
+              description: 'Type must be one of the predefined values and is required'
+            },
+            content: {
+              bsonType: 'string',
+              description: 'Content must be a string and is required'
+            }
+          }
+        }
+      }
+    });
+  }
+};
+```
+
+## Running Migrations
+
+Add the following scripts to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "migrate:create": "migrate-mongo create",
+    "migrate:up": "migrate-mongo up",
+    "migrate:down": "migrate-mongo down",
+    "migrate:status": "migrate-mongo status"
+  }
+}
+```
+
+### Usage Examples
+
+1. **Create a new migration**:
+   ```
+   npm run migrate:create -- add-new-field-to-users
+   ```
+
+2. **Apply pending migrations**:
+   ```
+   npm run migrate:up
+   ```
+
+3. **Roll back the last migration**:
+   ```
+   npm run migrate:down
+   ```
+
+4. **Check migration status**:
+   ```
+   npm run migrate:status
+   ```
+
+## Integration with Deployment Process
+
+Integrate migrations into your CI/CD pipeline:
+
+```yaml
+# In your GitHub Actions workflow or other CI/CD configuration
+- name: Run database migrations
+  run: npm run migrate:up
+  env:
+    MONGODB_URI: ${{ secrets.MONGODB_URI }}
+```
+
+## Troubleshooting
+
+### Handling Failed Migrations
+
+If a migration fails:
+
+1. Check the error message and logs
+2. Fix the issue in the migration file
+3. If the migration was partially applied, you might need to:
+   - Manually clean up any partial changes
+   - Create a new migration that completes the intended changes
+   - Update the changelog collection to reflect the corrected state
+
+### Manual Changelog Manipulation
+
+In extreme cases, you may need to manipulate the changelog collection directly:
+
+```javascript
+// Example: Mark a problematic migration as applied
+db.changelog.insertOne({
+  fileName: '20250401000000-create-users.js',
+  appliedAt: new Date()
+});
+
+// Example: Remove a migration entry to allow re-running
+db.changelog.deleteOne({
+  fileName: '20250401000000-create-users.js'
+});
+```
+
+## Seed Data for Development
+
+Create a separate script for seeding development data:
+
+```javascript
+// scripts/seedDevelopmentData.js
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+require('dotenv').config();
+
+const seedData = async () => {
+  try {
+    // Connect to database
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Connected to MongoDB');
+
+    // Import models
+    const User = require('../dist/models/User').User;
+    const TestSession = require('../dist/models/TestSession').TestSession;
+    const Section = require('../dist/models/Section').Section;
+    const Question = require('../dist/models/Question').Question;
+
+    // Clear existing data
+    await User.deleteMany({});
+    await TestSession.deleteMany({});
+    await Section.deleteMany({});
+    await Question.deleteMany({});
+
+    console.log('Cleared existing data');
+
+    // Create admin user
+    const adminPassword = await bcrypt.hash('admin123', 10);
+    const admin = await User.create({
+      email: 'admin@quietlight.com',
+      password: adminPassword,
+      firstName: 'Admin',
+      lastName: 'User',
+      role: 'admin'
+    });
+
+    console.log('Created admin user');
+
+    // Create test user
+    const userPassword = await bcrypt.hash('test123', 10);
+    const user = await User.create({
+      email: 'test@example.com',
+      password: userPassword,
+      firstName: 'Test',
+      lastName: 'User',
+      role: 'candidate'
+    });
+
+    console.log('Created test user');
+
+    // Create sections
+    const foundationalKnowledgeSection = await Section.create({
+      title: 'Foundational Knowledge',
+      description: 'Test your understanding of key concepts in business brokerage.',
+      type: 'multiple-choice',
+      day: 1,
+      order: 1,
+      timeLimit: 1800 // 30 minutes
+    });
+
+    const negotiationSection = await Section.create({
+      title: 'Timed Negotiation Simulation',
+      description: 'Respond to a high-pressure negotiation scenario.',
+      type: 'negotiation',
+      day: 1,
+      order: 2,
+      timeLimit: 300 // 5 minutes
+    });
+
+    console.log('Created test sections');
+
+    // Create sample questions
+    const question1 = await Question.create({
+      type: 'multiple-choice',
+      content: 'When evaluating a content site that receives 75% of its traffic from Google organic search, what recommendations would you give the owner to increase its value?',
+      options: [
+        'Develop alternative traffic sources like social media and email marketing',
+        'Focus on increasing the site\'s Domain Authority through aggressive link building',
+        'Create more content targeting higher-volume keywords to improve traffic',
+        'Implement display advertising to diversify beyond affiliate revenue',
+        'Invest in paid traffic to reduce dependency on organic search'
+      ],
+      correctOption: 0
+    });
+
+    const question2 = await Question.create({
+      type: 'negotiation',
+      content: 'A buyer unexpectedly demands a 20% price cut two days before closing. The seller is furious and wants to walk away. How would you handle this situation?',
+      scoringRubric: {
+        criteria: 'Strategic Thinking Under Pressure',
+        levels: [
+          { score: 1, description: 'Reactive response without clear strategy' },
+          { score: 2, description: 'Basic strategy with limited leverage identification' },
+          { score: 3, description: 'Adequate strategy addressing most key concerns' },
+          { score: 4, description: 'Strong strategy with good leverage point identification' },
+          { score: 5, description: 'Exceptional strategy with multiple leverage points and contingencies' }
+        ]
+      }
+    });
+
+    console.log('Created sample questions');
+
+    // Link questions to sections
+    await Section.findByIdAndUpdate(
+      foundationalKnowledgeSection._id,
+      { $push: { questions: question1._id } }
+    );
+
+    await Section.findByIdAndUpdate(
+      negotiationSection._id,
+      { $push: { questions: question2._id } }
+    );
+
+    console.log('Linked questions to sections');
+
+    // Create test session
+    await TestSession.create({
+      user: user._id,
+      day: 1,
+      status: 'pending',
+      sections: [foundationalKnowledgeSection._id, negotiationSection._id],
+      progress: {
+        sectionsCompleted: 0,
+        totalSections: 2
+      }
+    });
+
+    console.log('Created test session');
+
+    console.log('Seed data created successfully');
+  } catch (error) {
+    console.error('Error seeding data:', error);
+  } finally {
+    await mongoose.connection.close();
+    console.log('Database connection closed');
+  }
+};
+
+seedData();
+```
+
+Add to package.json:
+
+```json
+{
+  "scripts": {
+    "seed:dev": "node scripts/seedDevelopmentData.js"
+  }
+}
+```

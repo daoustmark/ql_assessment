@@ -1,0 +1,186 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Project Rules
+
+## Project Overview
+
+This project is a sophisticated web application for administering the Quiet Light Advisor Aptitude Test, a two-day assessment for potential business brokers. It evaluates candidates' knowledge, negotiation skills, ethical reasoning, communication abilities, and honesty through various question formats.
+
+## Technology Stack
+
+### Frontend
+- **Framework**: React.js with TypeScript
+- **Component Library**: Shadcn UI for customizable, accessible components
+- **Styling**: Tailwind CSS exclusively (avoid raw CSS unless absolutely necessary)
+- **Animations**: Framer Motion for transitions and interactions
+- **Data Visualization**: D3.js for charts and visualizations
+- **State Management**: React Context API and custom hooks
+
+### Backend
+- **Runtime**: Node.js with Express
+- **Database**: MongoDB
+- **Authentication**: JWT
+- **File Storage**: AWS S3 for video responses
+
+## Coding Standards
+
+### General
+- Use TypeScript for all code
+- Follow the DRY (Don't Repeat Yourself) principle
+- Write unit tests for critical functionality
+- Include JSDocs for all public functions and components
+
+### Naming Conventions
+- **Variables and Functions**: camelCase
+- **Components**: PascalCase
+- **Types and Interfaces**: PascalCase
+- **Constants**: UPPER_SNAKE_CASE
+- **Files**: Follow component name (e.g., `Button.tsx`, `Button.types.ts`)
+
+### Component Structure
+- Use functional components exclusively
+- Organize imports logically: React, third-party, internal
+- Define types/interfaces at the top of the file or in separate `.types.ts` files
+- Extract complex logic into custom hooks
+- Keep components focused on a single responsibility
+
+### File Organization
+```
+src/
+├── components/
+│   ├── ui/          # Shadcn UI components
+│   ├── layout/      # Layout components
+│   ├── forms/       # Form-related components
+│   ├── test/        # Test-specific components
+│   └── common/      # Shared components
+├── hooks/           # Custom React hooks
+├── pages/           # Page components
+├── services/        # API services
+├── types/           # Shared TypeScript types
+├── utils/           # Utility functions
+└── styles/          # Global styles and Tailwind config
+```
+
+### Styling Guidelines
+- Use Tailwind CSS classes exclusively
+- Group related Tailwind classes logically:
+  1. Layout (display, position)
+  2. Box model (width, height, padding, margin)
+  3. Typography (font, text)
+  4. Visual (colors, backgrounds, borders)
+  5. Misc (transitions, animations)
+- For dynamic styling, use `clsx` or `tailwind-merge`
+- Use Quiet Light's brand colors:
+  - Primary: Bespoke Navy (`#0a1a3d`)
+  - Secondary: Renew Mint (`#b8f7b8`), Nomad Blue (`#297dde`)
+  - Accent: Freedom Teal (`#66e0f5`), Constant Green (`#36a157`)
+
+### State Management
+- Use React Context for global state (authentication, test progress)
+- Use React Query for server state management
+- Use local state for component-specific concerns
+- Consider using Zustand for more complex state requirements
+
+### API Calls
+- Create service modules for API interactions
+- Use React Query for data fetching and caching
+- Handle loading, error, and success states consistently
+- Implement retry logic for transient failures
+
+### Forms
+- Use React Hook Form for form management
+- Implement Zod for schema validation
+- Create reusable form components
+- Handle form submission errors gracefully
+
+### Testing
+- Write unit tests for critical functionality
+- Use React Testing Library for component tests
+- Mock API calls and external dependencies
+- Test both happy paths and error scenarios
+
+### Performance
+- Implement code splitting for larger bundles
+- Use React.memo for expensive components
+- Optimize renders with useMemo and useCallback where appropriate
+- Lazy load components and routes
+- Implement virtualization for long lists
+
+### Accessibility
+- Ensure all interactive elements are keyboard accessible
+- Use appropriate ARIA attributes
+- Maintain proper heading hierarchy
+- Ensure sufficient color contrast
+- Support screen readers
+
+### Security
+- Sanitize all user inputs
+- Implement proper authentication and authorization
+- Use HTTPS for all API calls
+- Secure storage of sensitive data
+- Implement CSRF protection
+
+## Features Implementation
+
+### User Authentication
+- Implement secure login with JWT
+- Store tokens securely (HTTP-only cookies)
+- Handle session expiration gracefully
+- Implement role-based access control
+
+### Test Administration
+- Track candidate progress across sessions
+- Enforce time limits on relevant sections
+- Support session resumption
+- Implement automatic submission when time expires
+
+### Question Types
+- Implement all required question types:
+  - Multiple choice
+  - Text response
+  - Video recording
+  - Forced-choice
+  - Likert scale
+  - Open-ended text
+
+### Video Recording
+- Use browser APIs for video capture
+- Implement countdown and recording indicators
+- Allow preview before submission
+- Handle device permissions gracefully
+- Compress videos before upload when possible
+
+### Scoring System
+- Implement automatic scoring for objective questions
+- Create interfaces for manual scoring of subjective responses
+- Calculate section and overall scores
+- Generate visual representations of results
+
+### Analytics
+- Track completion rates and time spent
+- Identify commonly missed questions
+- Analyze consistency across responses
+- Generate performance trends
+
+## Commit Guidelines
+- Use conventional commit messages:
+  - feat: New feature
+  - fix: Bug fix
+  - docs: Documentation
+  - style: Formatting changes
+  - refactor: Code refactoring
+  - test: Adding or updating tests
+  - chore: Maintenance tasks
+- Keep commits focused on a single concern
+- Include ticket/issue numbers in commit messages when applicable
+
+## Code Review Standards
+- Verify adherence to project structure and naming conventions
+- Check for TypeScript errors and proper type definitions
+- Ensure comprehensive test coverage for new features
+- Verify accessibility compliance
+- Check for performance considerations
+- Confirm responsive design implementation

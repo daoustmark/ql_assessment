@@ -1,0 +1,675 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Frontend Implementation Rules
+
+## Component Design Principles
+
+### UI Components
+
+All UI components should:
+- Be fully typed with TypeScript
+- Accept consistent props patterns
+- Include comprehensive prop documentation
+- Support accessibility features
+- Handle loading, error, and empty states
+- Be responsive by default
+
+### Component Structure Example
+
+```tsx
+// Button.tsx
+import React from 'react';
+import { cn } from '@/lib/utils';
+import { ButtonProps } from './Button.types';
+
+/**
+ * Primary button component for user interactions
+ */
+export const Button: React.FC<ButtonProps> = ({
+  variant = 'default',
+  size = 'md',
+  children,
+  className,
+  disabled,
+  isLoading,
+  ...props
+}) => {
+  // Implementation
+};
+```
+
+```tsx
+// Button.types.ts
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  /** Visual variant of the button */
+  variant?: 'default' | 'primary' | 'secondary' | 'outline' | 'ghost';
+  /** Size of the button */
+  size?: 'sm' | 'md' | 'lg';
+  /** Whether the button shows a loading state */
+  isLoading?: boolean;
+}
+```
+
+## Tailwind CSS Implementation
+
+### Class Organization
+
+Organize Tailwind classes in a consistent order:
+
+```tsx
+// Recommended ordering
+<div className={cn(
+  // Layout (display, position)
+  "flex absolute inset-0",
+  // Box model (width, height, padding, margin)
+  "w-full h-12 p-4 my-2",
+  // Typography
+  "text-base font-medium text-gray-800",
+  // Visual (colors, backgrounds, borders)
+  "bg-white border border-gray-200 rounded-md shadow-sm",
+  // Misc (transitions, animations, cursor)
+  "transition-all duration-200 cursor-pointer",
+  // Responsive variants
+  "sm:flex-row md:w-auto lg:p-6",
+  // State variants
+  "hover:bg-gray-50 focus:ring-2 focus:ring-blue-500",
+  // Custom classes
+  className
+)}/>
+```
+
+### Custom Utility Function
+
+Use the utility function below for merging Tailwind classes:
+
+```tsx
+// src/lib/utils.ts
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+/**
+ * Combines multiple class values into a single className string,
+ * handling Tailwind class conflicts appropriately
+ */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+```
+
+### Quiet Light Brand Colors
+
+Configure Tailwind with the Quiet Light brand colors:
+
+```js
+// tailwind.config.js
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        'brand': {
+          'navy': '#0a1a3d',    // Bespoke Navy (Primary)
+          'mint': '#b8f7b8',    // Renew Mint (Secondary)
+          'blue': '#297dde',    // Nomad Blue (Secondary)
+          'teal': '#66e0f5',    // Freedom Teal (Accent)
+          'green': '#36a157',   // Constant Green (Accent)
+        },
+      },
+    },
+  },
+}
+```
+
+## Form Implementation
+
+### Form Structure
+
+Use React Hook Form with Zod validation:
+
+```tsx
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Button } from '@/components/ui/button';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+
+// Define form schema with Zod
+const formSchema = z.object({
+  email: z.string().email({ message: 'Please enter a valid email address' }),
+  password: z.string().min(8, { message: 'Password must be at least 8 characters' }),
+});
+
+// Infer TypeScript type from schema
+type FormValues = z.infer<typeof formSchema>;
+
+export function LoginForm() {
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
+
+  function onSubmit(values: FormValues) {
+    // Handle form submission
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input placeholder="email@example.com" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {/* Additional form fields */}
+        <Button type="submit" disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting ? 'Logging in...' : 'Login'}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+```
+
+## Video Recording Implementation
+
+Use the following pattern for video recording components:
+
+```tsx
+import React, { useState, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { useVideoRecorder } from '@/hooks/useVideoRecorder';
+import { cn } from '@/lib/utils';
+
+export function VideoRecorder({ onRecordingComplete, maxDuration = 120 }) {
+  const {
+    videoBlob,
+    isRecording,
+    timeRemaining,
+    startRecording,
+    stopRecording,
+    error,
+  } = useVideoRecorder({ maxDuration });
+  
+  const [isReviewing, setIsReviewing] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // Handle recording completion
+  const handleComplete = async () => {
+    if (videoBlob) {
+      onRecordingComplete(videoBlob);
+    }
+  };
+  
+  // Handle retry recording
+  const handleRetry = () => {
+    setIsReviewing(false);
+  };
+  
+  // After recording stops, show review
+  React.useEffect(() => {
+    if (videoBlob && !isRecording) {
+      setIsReviewing(true);
+      if (videoRef.current) {
+        videoRef.current.src = URL.createObjectURL(videoBlob);
+      }
+    }
+  }, [videoBlob, isRecording]);
+  
+  return (
+    <div className="flex flex-col items-center space-y-4">
+      {error && (
+        <div className="w-full p-3 text-white bg-red-500 rounded-md">
+          {error.message}
+        </div>
+      )}
+      
+      <div className={cn(
+        "relative w-full aspect-video bg-gray-100 rounded-lg overflow-hidden",
+        isRecording && "ring-2 ring-red-500"
+      )}>
+        {isReviewing ? (
+          <video ref={videoRef} className="w-full h-full" controls />
+        ) : (
+          <video id="preview" className="w-full h-full mirror" autoPlay muted />
+        )}
+        
+        {isRecording && (
+          <div className="absolute top-4 right-4 px-2 py-1 text-sm font-medium text-white bg-red-500 rounded-md animate-pulse">
+            Recording: {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+          </div>
+        )}
+      </div>
+      
+      <div className="flex items-center space-x-4">
+        {!isRecording && !isReviewing && (
+          <Button 
+            onClick={startRecording}
+            variant="primary"
+            size="lg"
+          >
+            Start Recording
+          </Button>
+        )}
+        
+        {isRecording && (
+          <Button 
+            onClick={stopRecording}
+            variant="destructive"
+            size="lg"
+          >
+            Stop Recording
+          </Button>
+        )}
+        
+        {isReviewing && (
+          <>
+            <Button 
+              onClick={handleRetry}
+              variant="outline"
+              size="lg"
+            >
+              Record Again
+            </Button>
+            <Button 
+              onClick={handleComplete}
+              variant="primary"
+              size="lg"
+            >
+              Submit Response
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## Custom Hook Implementation
+
+Create reusable hooks for common functionality:
+
+```tsx
+// useVideoRecorder.ts
+import { useState, useEffect, useRef } from 'react';
+
+interface VideoRecorderOptions {
+  maxDuration?: number; // in seconds
+}
+
+interface VideoRecorderReturn {
+  isRecording: boolean;
+  timeRemaining: number;
+  videoBlob: Blob | null;
+  startRecording: () => Promise<void>;
+  stopRecording: () => void;
+  error: Error | null;
+}
+
+export function useVideoRecorder({ maxDuration = 120 }: VideoRecorderOptions = {}): VideoRecorderReturn {
+  const [isRecording, setIsRecording] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(maxDuration);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+  
+  // Clean up resources when component unmounts
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+  
+  const startRecording = async () => {
+    try {
+      chunksRef.current = [];
+      setVideoBlob(null);
+      setError(null);
+      setTimeRemaining(maxDuration);
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      streamRef.current = stream;
+      
+      // Connect stream to preview element
+      const videoElement = document.getElementById('preview') as HTMLVideoElement;
+      if (videoElement) {
+        videoElement.srcObject = stream;
+      }
+      
+      // Create media recorder
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const videoBlob = new Blob(chunksRef.current, { type: 'video/webm' });
+        setVideoBlob(videoBlob);
+        
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+        }
+        
+        if (timerRef.current) {
+          window.clearInterval(timerRef.current);
+        }
+      };
+      
+      // Start recording
+      mediaRecorder.start(1000);
+      setIsRecording(true);
+      
+      // Set timer for countdown
+      timerRef.current = window.setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            stopRecording();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to start recording'));
+    }
+  };
+  
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    setIsRecording(false);
+    
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+    }
+  };
+  
+  return {
+    isRecording,
+    timeRemaining,
+    videoBlob,
+    startRecording,
+    stopRecording,
+    error,
+  };
+}
+```
+
+## Data Fetching Pattern
+
+Use React Query for data fetching:
+
+```tsx
+// src/services/api.ts
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: '/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add request interceptor for authentication
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Handle authentication errors
+    if (error.response?.status === 401) {
+      // Redirect to login or refresh token
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+```
+
+```tsx
+// src/services/testService.ts
+import api from './api';
+
+export interface Question {
+  id: string;
+  type: 'multiple-choice' | 'text' | 'video' | 'forced-choice' | 'likert' | 'open-ended';
+  content: string;
+  options?: string[];
+  // Other properties...
+}
+
+export const testService = {
+  // Get test session for the current day
+  getTestSession: async () => {
+    const { data } = await api.get('/test-sessions/current');
+    return data;
+  },
+  
+  // Get questions for a specific test section
+  getQuestions: async (sectionId: string) => {
+    const { data } = await api.get<Question[]>(`/sections/${sectionId}/questions`);
+    return data;
+  },
+  
+  // Submit answers for a test section
+  submitAnswers: async (sectionId: string, answers: Record<string, any>) => {
+    const { data } = await api.post(`/sections/${sectionId}/answers`, answers);
+    return data;
+  },
+  
+  // Upload video response
+  uploadVideoResponse: async (questionId: string, videoBlob: Blob) => {
+    const formData = new FormData();
+    formData.append('video', videoBlob, 'response.webm');
+    
+    const { data } = await api.post(`/questions/${questionId}/video-response`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    return data;
+  },
+};
+```
+
+```tsx
+// src/hooks/useQuestions.ts
+import { useQuery } from '@tanstack/react-query';
+import { testService } from '@/services/testService';
+
+export function useQuestions(sectionId: string) {
+  return useQuery({
+    queryKey: ['questions', sectionId],
+    queryFn: () => testService.getQuestions(sectionId),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+}
+```
+
+## Layout and Page Structure
+
+Use a consistent page structure:
+
+```tsx
+// src/pages/TestSessionPage.tsx
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router-dom';
+import { testService } from '@/services/testService';
+import { PageLayout } from '@/components/layout/PageLayout';
+import { TestHeader } from '@/components/test/TestHeader';
+import { QuestionContainer } from '@/components/test/QuestionContainer';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/useToast';
+
+export function TestSessionPage() {
+  const { sectionId } = useParams<{ sectionId: string }>();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  const { data: sessionData, isLoading: isSessionLoading, error: sessionError } = useQuery({
+    queryKey: ['test-session'],
+    queryFn: testService.getTestSession,
+  });
+  
+  const { data: questions, isLoading: isQuestionsLoading, error: questionsError } = 
+    useQuestions(sectionId || '');
+  
+  const isLoading = isSessionLoading || isQuestionsLoading;
+  const error = sessionError || questionsError;
+  
+  if (isLoading) {
+    return (
+      <PageLayout>
+        <div className="flex items-center justify-center h-screen">
+          <LoadingSpinner size="lg" />
+        </div>
+      </PageLayout>
+    );
+  }
+  
+  if (error) {
+    return (
+      <PageLayout>
+        <div className="flex flex-col items-center justify-center h-screen">
+          <h2 className="mb-4 text-xl font-bold text-red-600">An error occurred</h2>
+          <p className="mb-6 text-gray-600">{error instanceof Error ? error.message : 'Failed to load test session'}</p>
+          <Button 
+            onClick={() => window.location.reload()}
+            variant="outline"
+          >
+            Retry
+          </Button>
+        </div>
+      </PageLayout>
+    );
+  }
+  
+  return (
+    <PageLayout>
+      <TestHeader 
+        title={sessionData?.currentSection?.title || 'Test Session'} 
+        timeRemaining={sessionData?.currentSection?.timeRemaining}
+        progress={sessionData?.progress}
+      />
+      
+      <div className="container py-8">
+        {questions && <QuestionContainer questions={questions} sectionId={sectionId || ''} />}
+      </div>
+    </PageLayout>
+  );
+}
+```
+
+## Responsive Design
+
+Follow these patterns for responsive design:
+
+```tsx
+// Mobile-first approach
+<div className="
+  p-4 text-sm 
+  sm:p-6 sm:text-base
+  md:p-8 md:text-lg
+  lg:p-10 lg:text-xl
+">
+  Content
+</div>
+
+// For complex layouts
+<div className="
+  flex flex-col items-center space-y-4
+  md:flex-row md:items-start md:space-y-0 md:space-x-4
+">
+  <div className="w-full md:w-1/3">Sidebar</div>
+  <div className="w-full md:w-2/3">Main Content</div>
+</div>
+
+// For hiding/showing elements
+<div className="hidden md:block">Desktop Only</div>
+<div className="block md:hidden">Mobile Only</div>
+```
+
+## Testing Components
+
+Use Jest and React Testing Library:
+
+```tsx
+// Button.test.tsx
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { Button } from './Button';
+
+describe('Button component', () => {
+  it('renders correctly with default props', () => {
+    render(<Button>Click me</Button>);
+    const button = screen.getByRole('button', { name: /click me/i });
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveClass('bg-brand-navy'); // Primary color
+  });
+  
+  it('handles clicks correctly', () => {
+    const handleClick = jest.fn();
+    render(<Button onClick={handleClick}>Click me</Button>);
+    const button = screen.getByRole('button', { name: /click me/i });
+    fireEvent.click(button);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+  
+  it('displays loading state when isLoading is true', () => {
+    render(<Button isLoading>Click me</Button>);
+    expect(screen.getByRole('status')).toBeInTheDocument(); // Loading spinner
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+  });
+  
+  it('is disabled when disabled prop is true', () => {
+    render(<Button disabled>Click me</Button>);
+    expect(screen.getByRole('button', { name: /click me/i })).toBeDisabled();
+  });
+  
+  it('applies custom className', () => {
+    render(<Button className="custom-class">Click me</Button>);
+    expect(screen.getByRole('button', { name: /click me/i })).toHaveClass('custom-class');
+  });
+});
+```
