@@ -192,7 +192,7 @@
   - **Step Dependencies**: Step 18
   - **User Instructions**: None
 
-- [ ] Step 20: Implement video recording component
+- [x] Step 20: Implement video recording component
   - **Task**: Create a component for recording, reviewing, and submitting video responses.
   - **Files**:
     - `src/frontend/components/test/VideoRecorder.tsx`: Video recorder component

@@ -1,5 +1,6 @@
 import { Schema, model, Types } from 'mongoose';
 import { ITestSession, TestSessionStatus, TestSessionDay } from '../../types/session.types';
+import { Prisma } from '@prisma/client';
 
 const testSessionSchema = new Schema<ITestSession>(
   {
@@ -56,4 +57,28 @@ const testSessionSchema = new Schema<ITestSession>(
 testSessionSchema.index({ user: 1, status: 1, day: 1 });
 testSessionSchema.index({ user: 1, day: 1 }, { unique: true });
 
-export const TestSession = model<ITestSession>('TestSession', testSessionSchema); 
+export const TestSession = model<ITestSession>('TestSession', testSessionSchema);
+
+export type TestSessionStatus = 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export type TestSession = Prisma.TestSessionGetPayload<{
+  include: {
+    test: {
+      include: {
+        questions: true;
+      };
+    };
+  };
+}>;
+
+export const testSessionSchema = {
+  id: 'string',
+  testId: 'string',
+  userId: 'string',
+  status: 'string',
+  startTime: 'date',
+  endTime: 'date?',
+  answers: 'object',
+  createdAt: 'date',
+  updatedAt: 'date',
+} as const; 
