@@ -67,7 +67,7 @@
   - **Step Dependencies**: Step 5
   - **User Instructions**: None
 
-- [ ] Step 7: Define question and response schemas
+- [x] Step 7: Define question and response schemas
   - **Task**: Create schemas for different question types and corresponding responses.
   - **Files**:
     - `src/backend/models/Question.ts`: Question model with discriminators for different types
