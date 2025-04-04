@@ -40,15 +40,13 @@
 
 ## Database and Backend Setup
 
-- [x] Step 4: Configure MongoDB connection
-  - **Task**: Set up MongoDB connection using Mongoose or a similar ODM. Configure database connection with proper error handling.
+- [x] Step 4: Backup existing MongoDB schema and data
+  - **Task**: Create a script to download the current schema structure and data content from the existing MongoDB database (MONGODB_URI=mongodb+srv://daoustmark:qH2LkzTTeEdhXWjs@cluster0.qerbghs.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0). This backup is crucial before proceeding with schema modifications.
   - **Files**:
-    - `src/backend/config/db.ts`: Database connection configuration
-    - `src/backend/server.ts`: Server entry point
-    - `.env`: Environment variables for database connection (create example file)
-    - `.env.example`: Example environment variables
+    - `scripts/backup_mongo.ts`: Script to perform the database backup.
+    - `.env`: Ensure MONGODB_URI is present.
   - **Step Dependencies**: Step 1
-  - **User Instructions**: Create a MongoDB Atlas account or set up a local MongoDB instance. Add connection string to `.env` file.
+  - **User Instructions**: Ensure the MongoDB connection string is correctly configured in the `.env` file. Run the backup script before making schema changes in subsequent steps.
 
 - [x] Step 5: Define user schema and models
   - **Task**: Create schemas for users, including candidates and administrators. Define proper field validation and indexes.
@@ -185,10 +183,10 @@
 - [x] Step 19: Create question type components
   - **Task**: Implement components for different question types.
   - **Files**:
-    - `src/frontend/components/test/MultipleChoiceQuestion.tsx`: Multiple-choice question component
-    - `src/frontend/components/test/TextResponseQuestion.tsx`: Text response question component
-    - `src/frontend/components/test/ForcedChoiceQuestion.tsx`: Forced-choice question component
-    - `src/frontend/components/test/LikertScaleQuestion.tsx`: Likert scale question component
+    - [x] `src/frontend/components/test/MultipleChoiceQuestion.tsx`: Multiple-choice question component
+    - [x] `src/frontend/components/test/TextResponseQuestion.tsx`: Text response question component
+    - [x] `src/frontend/components/test/ForcedChoiceQuestion.tsx`: Forced-choice question component
+    - [x] `src/frontend/components/test/LikertScaleQuestion.tsx`: Likert scale question component
   - **Step Dependencies**: Step 18
   - **User Instructions**: None
 
@@ -222,17 +220,14 @@
   - **User Instructions**: None
 
 - [x] Step 23: Implement Day 1 test sections
-  - **Task**: Create components and logic for Day 1 test sections.
+  - **Task**: Create components and logic for Day 1 test sections. (Placeholder components created)
   - **Files**:
     - `src/frontend/components/pages/day1/FoundationalKnowledge.tsx`: Foundational knowledge section
-    - `src/frontend/components/pages/day1/TimedNegotiation.tsx`: Timed negotiation section
-    - `src/frontend/components/pages/day1/EthicalDilemmas.tsx`: Ethical dilemmas section
-    - `src/frontend/components/pages/day1/Day1Complete.tsx`: Day 1 complete page
   - **Step Dependencies**: Step 22
   - **User Instructions**: None
 
 - [x] Step 24: Implement Day 2 test sections
-  - **Task**: Create components and logic for Day 2 test sections.
+  - **Task**: Create components and logic for Day 2 test sections. (Placeholder components created)
   - **Files**:
     - `src/frontend/components/pages/day2/ScenarioBasedCases.tsx`: Scenario-based cases section
     - `src/frontend/components/pages/day2/VideoResponses.tsx`: Video responses section
@@ -242,28 +237,60 @@
   - **Step Dependencies**: Step 23
   - **User Instructions**: None
 
-- [x] Step 25: Implement transitions and animations
+- [ ] Step 25: Implement transitions and animations
   - **Task**: Add smooth transitions between test sections using Framer Motion.
   - **Files**:
-    - `src/frontend/components/ui/PageTransition.tsx`: Page transition component
-    - `src/frontend/components/ui/FadeIn.tsx`: Fade-in animation component
-    - `src/hooks/useAnimations.ts`: Animations hook
-    - Update various page components to include animations
+    - [x] `src/frontend/components/ui/PageTransition.tsx`: Page transition component
+    - [x] `src/frontend/components/ui/FadeIn.tsx`: Fade-in animation component
+    - [ ] `src/hooks/useAnimations.ts`: Animations hook (Deferred)
+    - [x] Update various page components to include animations (RootLayout updated)
   - **Step Dependencies**: Step 23, Step 24
   - **User Instructions**: Run `npm install framer-motion` to install Framer Motion.
 
 ## Admin Dashboard Implementation
 
-- [x] Step 26: Create admin dashboard layout and navigation
-  - [x] Create main dashboard layout with sidebar navigation
-  - [x] Implement overview page with statistics and recent activity
-  - [x] Create candidates page with table and actions
-  - [x] Create test sessions page with table and actions
-  - [x] Create questions page with table and actions
-  - [x] Create settings page with configuration options
-  - [x] Add responsive design for mobile devices
-  - [x] Implement navigation state management
-  - [x] Add loading states and error handling
-  - [x] Style with consistent design system
+- [ ] Step 26: Create admin dashboard layout and navigation
+  - [x] Create main dashboard layout with sidebar navigation (Initial Structure)
+  - [x] Implement overview page with statistics and recent activity (Initial Structure)
+  - [ ] Create candidates page with table and actions (Placeholder page created)
+  - [ ] Create test sessions page with table and actions (Placeholder page created)
+  - [ ] Create questions page with table and actions (Placeholder page created)
+  - [ ] Create settings page with configuration options (Placeholder page created)
+  - [ ] Add responsive design for mobile devices
+  - [ ] Implement navigation state management
+  - [ ] Add loading states and error handling
+  - [ ] Style with consistent design system
   - **Files**:
     - `src/frontend/components/pages/admin/Dashboard.tsx`: Admin dashboard page
+
+## Backend Integration and Test Readiness
+
+- [ ] Step 27: Implement Backend API Endpoints
+  - **Task**: Implement the necessary backend API endpoints as defined in `general.mdc` and required by the frontend context/components. This includes Auth, Test Sessions (current, section details, completion), Answers/Responses (submission, retrieval), and Video Upload (S3 integration).
+  - **Files**: `src/backend/controllers/*`, `src/backend/routes/*`, `src/backend/services/*`, `src/backend/models/*`.
+  - **Dependencies**: Steps 5-7 (Schemas), Step 13 (Storage Config).
+
+- [ ] Step 28: Integrate Backend APIs into Frontend Contexts
+  - **Task**: Replace placeholder `fetch` calls and dummy data in `TestSessionContext.tsx` and `AuthContext.tsx` with actual API calls. Handle loading, errors, auth tokens, and data mapping.
+  - **Files**: `src/contexts/TestSessionContext.tsx`, `src/contexts/AuthContext.tsx`.
+  - **Dependencies**: Step 27 (Backend Endpoints), Step 15 (Auth Context).
+
+- [ ] Step 29: Implement Test Feature Components
+  - **Task**: Create and integrate the `Timer` and `ProgressIndicator` components (Step 18). Implement timer logic interaction with the context.
+  - **Files**: `src/frontend/components/test/Timer.tsx`, `src/frontend/components/test/ProgressIndicator.tsx`, `src/frontend/components/pages/TestSession.tsx`, `src/contexts/TestSessionContext.tsx`.
+  - **Dependencies**: Step 18 (Component definitions), Step 21 (Test Session Context).
+
+- [ ] Step 30: Refine Section Component Logic & Rendering
+  - **Task**: Update Day 1 & Day 2 section components (`FoundationalKnowledge`, `ScenarioBasedCases`, etc.) to use data from the integrated context and render the appropriate question components (`MultipleChoiceQuestion`, `VideoRecorder`, etc.). Add section-specific layout/instructions.
+  - **Files**: `src/frontend/components/pages/day1/*`, `src/frontend/components/pages/day2/*`.
+  - **Dependencies**: Step 19 (Question Components), Step 23 & 24 (Placeholders), Step 28 (Integrated Context).
+
+- [ ] Step 31: Populate Database with Test Content
+  - **Task**: Add realistic test sections and questions (covering all implemented types) for Day 1 and Day 2 into MongoDB, matching the schemas.
+  - **Files**: N/A (Database operation, potentially `scripts/seed_db.ts`).
+  - **Dependencies**: Steps 5-7 (Schemas).
+
+- [ ] Step 32: End-to-End Candidate Flow Testing
+  - **Task**: Manually test the complete candidate workflow: Login -> Start Test -> Navigate Sections/Questions -> Answer all types -> Timer -> Complete Days -> Completion Page. Verify data persistence and submission.
+  - **Files**: N/A (Testing).
+  - **Dependencies**: All preceding steps.

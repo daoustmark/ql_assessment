@@ -1,0 +1,20 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+
+# MongoDB Configuration
+MONGODB_URI=mongodb+srv://daoustmark:qH2LkzTTeEdhXWjs@cluster0.qerbghs.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0 
+
+# JWT Configuration
+JWT_SECRET='f478c058bdabe837849426407776021ec2fab7dc7d7432e3446b95e5ac8ebf23f3b14029566202ca1ea76df8e4e13cec49c4bb2093f8e97439eae53a86fc3f2ef69af01ccb3f569d71b18daa0570346d5933d2f7a9119204d36b69b7ebca6a0bf01f217d9f0f3d45fdefff05467f137b489948bb5f85d4c7bce2188db80b8cc2f816094855a6c6912088849ee119ddff323d790985e15f4fdc20e472cf8f0723fae339d8061b6166ef52de513a863b2c71a9e67889ff7c0e65aa04be55e3d3daad5adf32e46b9e96e18def97798e39cead19da3bc17be1147e63f5ca5df28519bb0283c4816e0dfba08d7a4d421f8c4aa0b355fa57a872bdbe961ce10d777485' # CHANGE THIS! Generate a strong random key.
+JWT_EXPIRES_IN='1d' # Access token validity (e.g., 1d, 1h, 15m)
+JWT_REFRESH_EXPIRES_IN='7d' # Refresh token validity 
+
+# AWS S3 Configuration
+AWS_REGION='us-east-2' # Replace with your desired region
+AWS_ACCESS_KEY_ID='AKIATKM3F4X45GC6SE55' # Replace with your key
+AWS_SECRET_ACCESS_KEY='m0+xeT7ni6EzeZebCzAcavukYtlraCSsLiKNdfRd' # Replace with your secret
+S3_BUCKET_NAME='quiet-light-test-videos' # Replace with your bucket name 

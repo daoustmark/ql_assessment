@@ -1,9 +1,0 @@
----
-description: 
-globs: 
-alwaysApply: true
----
-- Build this project following the steps in /backup/plan.md
-- Update plan.md once each step is completed
-- Update our git repository
-- Allow for user testing
