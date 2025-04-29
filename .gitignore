@@ -31,4 +31,8 @@ yarn-error.log*
 *.swo
 
 # TypeScript
-*.tsbuildinfo 
+*.tsbuildinfo
+
+# MongoDB
+.mongodb/
+*.mongodb 
