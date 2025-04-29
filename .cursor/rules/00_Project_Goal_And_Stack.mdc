@@ -1,0 +1,40 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# MDC Context: 00 - Project Goal & Tech Stack (Revised w/ Structure)
+
+## Goal
+
+Build the assessment app defined in `questions.json`. Users log in, take the multi-part test, answers (including video) are saved to Supabase.
+
+## Core Tech Stack
+
+-   **Framework:** Next.js (App Router) w/ TypeScript (`src/` directory)
+-   **Backend/DB:** Supabase (Postgres, Auth, Storage)
+-   **Styling:** Tailwind CSS + daisyUI
+-   **AI Agent:** Cursor.ai
+
+## Defined Directory Structure (Key Areas)
+
+-   `src/app/`: Routes & Pages
+-   `src/components/`: Reusable UI (broken down by feature: `auth`, `assessment`, `ui`)
+-   `src/lib/`: Utilities, Supabase clients (`supabase/client.ts`, `supabase/admin.ts`)
+-   `src/types/`: Shared TypeScript definitions
+-   `scripts/`: Database seeding (`seedDatabase.ts`)
+-   `supabase/migrations/`: Database schema SQL files
+-   `src/middleware.ts`: Authentication route protection
+
+## High-Level Plan (Refined)
+
+1.  Setup Project & Supabase CLI (`01_*`)
+2.  Define DB Schema via Migration (`02_*`, place SQL in `supabase/migrations/`)
+3.  Seed the DB (`03_*`, script in `scripts/`)
+4.  Implement Authentication (`04_*`, using `src/components/auth/`, `src/app/(auth)/`, `src/middleware.ts`)
+5.  Build Core Assessment Flow (`05_*`, likely in `src/app/assessment/[attemptId]/page.tsx` and `src/components/assessment/`)
+6.  Create UI Components (`06_*` to `09_*`, place in `src/components/assessment/`)
+7.  Integrate Video Upload (`09_*`, using `Supabase Storage` and `src/components/assessment/VideoRecorder.tsx`)
+8.  Style & Deploy (`10_*`)
+
+*This structure provides clear homes for different code types, reducing ambiguity for the AI.*

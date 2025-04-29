@@ -1,0 +1,15 @@
+{
+  "name": "supabase-scripts",
+  "version": "1.0.0",
+  "description": "Scripts for Supabase database operations",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "seed": "node seedDatabase.js",
+    "seed:dev": "NEXT_PUBLIC_SUPABASE_URL=https://mfeaktevlnqvyapgaqvw.supabase.co node seedDatabase.js"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.49.4"
+  }
+}

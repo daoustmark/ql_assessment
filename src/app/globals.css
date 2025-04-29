@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #0a1a3d; /* Bespoke Navy */
+  --primary: #0a1a3d;    /* Bespoke Navy */
+  --secondary: #297dde;  /* Nomad Blue */
+  --accent: #b8f7b8;     /* Renew Mint */
+  --success: #36a157;    /* Constant Green */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a1a3d; /* Bespoke Navy */
+    --foreground: #ffffff;
+    --primary: #b8f7b8;    /* Renew Mint */
+    --secondary: #61a1e3;  /* Nomad Blue 75% */
+    --accent: #0a1a3d;     /* Bespoke Navy */
+    --success: #6bc47a;    /* Constant Green 75% */
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans, Arial, Helvetica, sans-serif);
+}
+
+/* Custom focus styles */
+:focus-visible {
+  outline: 2px solid #297dde; /* Nomad Blue */
+  outline-offset: 2px;
+}
+
+/* Button hover effects */
+.btn:hover {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Card hover effects */
+.card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(10, 26, 61, 0.1), 0 4px 6px -2px rgba(10, 26, 61, 0.05);
+}
+
+/* Page transition animations */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.slide-in {
+  animation: slideIn 0.5s ease-in-out;
+}
+
+.scale-in {
+  animation: scaleIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Layout and spacing utilities */
+.section-padding {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Question animations */
+.question-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.question-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.question-exit {
+  opacity: 1;
+}
+
+.question-exit-active {
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: opacity 300ms, transform 300ms;
+}
+
+/* Progress bar animations */
+.progress-bar-animated {
+  background-size: 30px 30px;
+  background-image: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  animation: progressAnimation 1s linear infinite;
+}
+
+@keyframes progressAnimation {
+  from { background-position: 0 0; }
+  to { background-position: 30px 0; }
+} 

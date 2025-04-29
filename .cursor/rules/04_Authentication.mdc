@@ -1,0 +1,92 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# MDC Context: 04 - Authentication (Revised w/ Structure)
+
+## Goal
+
+Set up user signup/login using Supabase Auth, placing components and pages in their defined locations (`src/components/auth/`, `src/app/(auth)/`) and protecting routes using `src/middleware.ts`.
+
+## Steps
+
+1.  **Configure Supabase Auth Settings:** (Done via Supabase Dashboard - see previous response).
+
+2.  **Create Auth Form Components:**
+    * Create `src/components/auth/LoginForm.tsx`.
+    * Create `src/components/auth/SignupForm.tsx`.
+    * Build these using HTML form elements, `useState` for inputs, style with Tailwind/daisyUI (`input`, `btn`, `card`, `alert`).
+    * Implement `onSubmit` handlers calling `supabase.auth.signInWithPassword` or `supabase.auth.signUp` (import `createClient` from `@/lib/supabase/client`).
+    * Include error handling and loading state feedback.
+
+3.  **Create Auth Pages:**
+    * Create `src/app/(auth)/login/page.tsx`. Import and render `<LoginForm />`.
+    * Create `src/app/(auth)/signup/page.tsx`. Import and render `<SignupForm />`.
+    * Use `useRouter` from `next/navigation` within the form components for redirection on success.
+
+4.  **Implement Logout & Session Check:**
+    * Add a Logout button (e.g., in `src/components/ui/Layout.tsx` or a dedicated Navbar component later).
+    * The button's `onClick` should call `supabase.auth.signOut()` (using the client-side Supabase instance).
+    * You'll need a way to conditionally render UI based on session state (e.g., fetch session in layout or use a context provider).
+
+5.  **Implement Route Protection Middleware:**
+    * Create/Update `src/middleware.ts`.
+    * Use the `@supabase/ssr` package (`createServerClient`) to check for a valid session.
+    * Define `protectedRoutes` array (e.g., `['/assessment', '/results', '/dashboard']`).
+    * Redirect unauthenticated users trying to access protected routes to `/login`.
+    * *(Use the middleware code provided in the previous response as a template, ensuring paths and logic match the defined structure)*.
+    * **Ensure `@supabase/ssr` is installed:** `npm install @supabase/ssr`.
+
+6.  **Define Auth RLS Policies (SQL):**
+    * While middleware protects routes, RLS protects data access.
+    * Create a *new* migration file:
+        ```bash
+        supabase migration new setup_auth_policies
+        ```
+    * Edit `supabase/migrations/<timestamp>_setup_auth_policies.sql`:
+        ```sql
+        -- Example Policies for assessment_attempts
+
+        -- 1. Enable RLS (If not done in initial migration)
+        -- ALTER TABLE assessment_attempts ENABLE ROW LEVEL SECURITY;
+
+        -- 2. Allow users to see their own attempts
+        CREATE POLICY "Users can view their own assessment attempts."
+        ON assessment_attempts
+        FOR SELECT USING (auth.uid() = user_id);
+
+        -- 3. Allow users to create attempts for themselves
+        CREATE POLICY "Users can insert their own assessment attempts."
+        ON assessment_attempts
+        FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+        -- Example Policies for user_answers (similar logic)
+        -- ALTER TABLE user_answers ENABLE ROW LEVEL SECURITY;
+
+        CREATE POLICY "Users can view their own answers."
+        ON user_answers
+        FOR SELECT USING (
+          auth.uid() = (
+            SELECT user_id FROM assessment_attempts WHERE id = user_answers.attempt_id
+          )
+        );
+
+        CREATE POLICY "Users can insert answers for their own attempts."
+        ON user_answers
+        FOR INSERT WITH CHECK (
+          auth.uid() = (
+            SELECT user_id FROM assessment_attempts WHERE id = user_answers.attempt_id
+          )
+        );
+
+        -- Add policies for other tables (profiles, results etc.) as needed
+        ```
+    * Apply the migration:
+        ```bash
+        supabase db push
+        ```
+
+## Outcome
+
+Authentication flow implemented. Components and pages are in structured locations. Middleware protects routes, and basic RLS policies protect user-specific data in the database.
