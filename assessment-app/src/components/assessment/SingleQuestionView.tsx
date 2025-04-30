@@ -90,8 +90,47 @@ export function SingleQuestionView({
         setIsTransitioning(false);
       }, 300);
     } else {
+      // This is the final question - we'll submit
+      console.log("[DEBUG] Attempting to submit final answer");
       setIsSubmitting(true);
-      onComplete();
+      
+      // Add a safety timeout in case the submission takes too long
+      const safetyTimeout = setTimeout(() => {
+        console.log("[DEBUG] Submission timeout triggered - forcing state reset");
+        setIsSubmitting(false);
+      }, 30000); // 30 seconds timeout
+      
+      // Create a promise that resolves after the onComplete callback
+      const handleCompletion = async () => {
+        try {
+          console.log("[DEBUG] Calling onComplete");
+          await Promise.resolve(onComplete()); // Await the callback in case it's async
+          console.log("[DEBUG] onComplete called successfully");
+          clearTimeout(safetyTimeout);
+          console.log("[DEBUG] Submission flow completed with result: completed");
+          
+          // Force state reset to avoid UI being stuck
+          setTimeout(() => {
+            console.log("[DEBUG] Forcing UI update after submit");
+            setIsSubmitting(false);
+          }, 500);
+          return "completed";
+        } catch (error) {
+          console.error("[DEBUG] Error in completion callback:", error);
+          clearTimeout(safetyTimeout);
+          setIsSubmitting(false);
+          return "error";
+        }
+      };
+      
+      // Set another timeout to prevent getting stuck in a pending state
+      setTimeout(() => {
+        console.log("[DEBUG] Internal promise timeout reached");
+      }, 5000);
+      
+      handleCompletion().then(result => {
+        console.log("[DEBUG] Submission flow completed with result:", result);
+      });
     }
   };
 
@@ -176,10 +215,9 @@ export function SingleQuestionView({
       </div>
       
       <Card 
-        colorAccent="primary"
         className={`transition-opacity duration-slow ${isTransitioning ? 'opacity-0' : 'opacity-100'} animate-slide-in-up shadow-floating border-subtle`}
-        padding="md"
-        elevation="md"
+        padding="medium"
+        elevation="floating"
       >
         {/* Question header with question text */}
         <div className="border-b border-subtle pb-6 mb-7">

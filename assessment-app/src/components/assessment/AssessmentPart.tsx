@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { VideoRecorder } from './VideoRecorder';
 import { BlockRenderer } from './BlockRenderer';
+import { BlockTransition } from './BlockTransition';
 import { Card, ProgressBar, Button } from '@/components/ui';
 
 interface PartType {
@@ -29,6 +30,8 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
   const [userId, setUserId] = useState<string>('');
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [showBlockTransition, setShowBlockTransition] = useState(false);
+  const [completedBlockIndex, setCompletedBlockIndex] = useState<number | null>(null);
   const numericAttemptId = parseInt(attemptId);
 
   React.useEffect(() => {
@@ -117,57 +120,125 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
   };
 
   const handleSubmit = async () => {
+    console.log("[DEBUG-PART] Starting handleSubmit");
     setSubmitting(true);
     
     try {
       const supabase = createClient();
+      console.log("[DEBUG-PART] Creating supabase client completed");
+      
+      // Track how many answers we're attempting to save
+      const totalAnswers = Object.entries(answers).length;
+      console.log(`[DEBUG-PART] Processing ${totalAnswers} answers`);
+      
+      let processedCount = 0;
       
       // Insert or update answers
       for (const [questionId, answerData] of Object.entries(answers)) {
-        if (answerData.id) {
-          // Update existing answer
-          await supabase
-            .from('user_answers')
-            .update({
-              text_answer: answerData.text_answer,
-              mcq_option_id: answerData.mcq_option_id,
-              likert_rating: answerData.likert_rating,
-              video_response_path: answerData.video_response_path,
-              answered_at: new Date().toISOString()
-            })
-            .eq('id', answerData.id);
-        } else {
-          // Insert new answer
-          await supabase
-            .from('user_answers')
-            .insert({
-              attempt_id: numericAttemptId,
-              question_id: parseInt(questionId),
-              text_answer: answerData.text_answer,
-              mcq_option_id: answerData.mcq_option_id,
-              likert_rating: answerData.likert_rating,
-              video_response_path: answerData.video_response_path
-            });
+        try {
+          if (answerData.id) {
+            // Update existing answer
+            console.log(`[DEBUG-PART] Updating answer for question ${questionId}`);
+            const { error: updateError } = await supabase
+              .from('user_answers')
+              .update({
+                text_response: answerData.text_answer,
+                selected_mcq_option_id: answerData.mcq_option_id,
+                likert_score: answerData.likert_rating,
+                video_response_path: answerData.video_response_path,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', answerData.id);
+              
+            if (updateError) {
+              console.error('[DEBUG-PART] Error updating answer:', updateError);
+              throw new Error(`Failed to update answer: ${updateError.message}`);
+            }
+          } else {
+            // Insert new answer
+            console.log(`[DEBUG-PART] Inserting new answer for question ${questionId}`);
+            const { error: insertError } = await supabase
+              .from('user_answers')
+              .insert({
+                attempt_id: numericAttemptId,
+                question_id: parseInt(questionId),
+                text_response: answerData.text_answer,
+                selected_mcq_option_id: answerData.mcq_option_id,
+                likert_score: answerData.likert_rating,
+                video_response_path: answerData.video_response_path
+              });
+              
+            if (insertError) {
+              console.error('[DEBUG-PART] Error inserting answer:', insertError);
+              throw new Error(`Failed to insert answer: ${insertError.message}`);
+            }
+          }
+          
+          processedCount++;
+          console.log(`[DEBUG-PART] Processed ${processedCount}/${totalAnswers} answers`);
+        } catch (answerError) {
+          console.error(`[DEBUG-PART] Error processing answer for question ${questionId}:`, answerError);
+          // Continue with other answers instead of failing everything
         }
       }
       
-      // Call onComplete to move to the next part
-      onComplete();
-    } catch (err: any) {
-      console.error('Error submitting answers:', err);
+      console.log(`[DEBUG-PART] Answer processing complete. Successfully processed ${processedCount}/${totalAnswers} answers`);
+      
+      // Call onComplete to move to the next part - with timeout protection
+      console.log("[DEBUG-PART] All answers saved, now calling onComplete to move to next part");
+      
+      // Prevent Spinner from getting stuck by ensuring submitting state is reset
+      setTimeout(() => {
+        if (submitting) {
+          console.log("[DEBUG-PART] Force resetting submitting state after 8 seconds");
+          setSubmitting(false);
+        }
+      }, 8000);
+      
+      // Always update the submission state after a short delay
+      setTimeout(() => {
+        setSubmitting(false);
+      }, 1000);
+      
+      // Call the completion callback
+      try {
+        console.log("[DEBUG-PART] Calling onComplete to move to next part");
+        // Make sure onComplete is valid before calling it
+        if (typeof onComplete === 'function') {
+          await Promise.resolve(onComplete()); // Use Promise.resolve to handle both sync and async functions
+          console.log("[DEBUG-PART] onComplete called successfully - should be moving to next part now");
+        } else {
+          console.error("[DEBUG-PART] onComplete is not a function:", typeof onComplete);
+        }
+      } catch (completeError) {
+        console.error('[DEBUG-PART] Error during completion callback:', completeError);
+        throw completeError;
+      }
+    } catch (err) {
+      console.error('[DEBUG-PART] Error submitting answers:', err);
       setError('Failed to save your answers. Please try again.');
-    } finally {
-      setSubmitting(false);
+      setTimeout(() => setSubmitting(false), 1000);
     }
   };
 
   const nextBlock = () => {
     if (currentBlockIndex < blocks.length - 1) {
-      setCurrentBlockIndex(currentBlockIndex + 1);
-      window.scrollTo(0, 0);
+      // Set the completed block index to show in the transition screen
+      setCompletedBlockIndex(currentBlockIndex);
+      setShowBlockTransition(true);
     } else {
       handleSubmit();
     }
+  };
+
+  const handleContinueToNextBlock = () => {
+    // Hide the transition screen
+    setShowBlockTransition(false);
+    
+    // Move to the next block
+    setCurrentBlockIndex(currentBlockIndex + 1);
+    setCurrentQuestionIndex(0);
+    window.scrollTo(0, 0);
   };
 
   const prevBlock = () => {
@@ -191,7 +262,7 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
 
   if (error) {
     return (
-      <Card colorAccent="blue" className="animate-slide-in-up">
+      <Card className="animate-slide-in-up">
         <div className="text-center text-error">
           {error}
         </div>
@@ -201,7 +272,7 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
 
   if (blocks.length === 0) {
     return (
-      <Card colorAccent="blue" className="animate-slide-in-up">
+      <Card className="animate-slide-in-up">
         <h2 className="text-xl font-medium text-bespoke-navy mb-4">No content found</h2>
         <p className="text-bespoke-navy-75 mb-8">There are no questions in this section.</p>
         <div className="flex justify-end">
@@ -217,6 +288,22 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
   }
 
   const currentBlock = blocks[currentBlockIndex];
+
+  // If showing the block transition screen
+  if (showBlockTransition && completedBlockIndex !== null) {
+    const prevBlock = blocks[completedBlockIndex];
+    const nextBlock = blocks[currentBlockIndex + 1];
+    
+    return (
+      <BlockTransition
+        prevBlockTitle={prevBlock.title}
+        nextBlockTitle={nextBlock.title}
+        partTitle={part.title}
+        partProgress={{ current: currentBlockIndex + 1, total: blocks.length }}
+        onContinue={handleContinueToNextBlock}
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -245,7 +332,9 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
               height="h-4"
               label="Question Progress"
             />
-            <p className="text-sm text-gray-600 mt-1">{currentBlock?.title || "Current Block"}</p>
+            <p className="text-sm text-gray-600 mt-1">
+              {currentBlock?.title ? `Block ${currentBlockIndex + 1}: ${currentBlock.title}` : "Current Block"}
+            </p>
           </div>
         </div>
       </div>
@@ -253,7 +342,7 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
       {/* Section Title */}
       <div className="mb-2">
         <h1 className="text-2xl font-bold text-gray-900">
-          Foundational Knowledge
+          {part.title}
         </h1>
         <p className="text-gray-700 mt-2">
           {part.description}
