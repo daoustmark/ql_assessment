@@ -333,7 +333,7 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
               label="Question Progress"
             />
             <p className="text-sm text-gray-600 mt-1">
-              {currentBlock?.title ? `Block ${currentBlockIndex + 1}: ${currentBlock.title}` : "Current Block"}
+              {currentBlock?.title ? `Block ${currentBlockIndex + 1}: ${currentBlock.title.replace(/^Block \d+: /, '')}` : "Current Block"}
             </p>
           </div>
         </div>
@@ -342,7 +342,7 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
       {/* Section Title */}
       <div className="mb-2">
         <h1 className="text-2xl font-bold text-gray-900">
-          {part.title}
+          Part {part.sequence_order}: {part.title}
         </h1>
         <p className="text-gray-700 mt-2">
           {part.description}

@@ -37,10 +37,10 @@ interface Part {
 }
 
 export default function AssessmentPage({ params }: PageProps) {
-  const attemptIdParam = params.attemptId;
-  const attemptId = attemptIdParam ? parseInt(attemptIdParam) : 0;
   const router = useRouter();
   const supabase = createClient();
+  
+  const [attemptId, setAttemptId] = useState<number>(0);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,20 +54,28 @@ export default function AssessmentPage({ params }: PageProps) {
   const [showPartTransition, setShowPartTransition] = useState(false);
   const [completedPartIndex, setCompletedPartIndex] = useState<number | null>(null);
   
-  // Fetch attempt data and associated assessment
   useEffect(() => {
+    if (params && params.attemptId) {
+      const id = parseInt(params.attemptId);
+      if (!isNaN(id)) {
+        setAttemptId(id);
+      }
+    }
+  }, [params]);
+  
+  useEffect(() => {
+    if (attemptId <= 0) return;
+    
     async function fetchData() {
       try {
         setLoading(true);
         
-        // Get current user
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) {
           router.push('/login');
           return;
         }
         
-        // Fetch attempt
         const { data: attemptData, error: attemptError } = await supabase
           .from('assessment_attempts')
           .select('*')
@@ -78,14 +86,12 @@ export default function AssessmentPage({ params }: PageProps) {
           throw new Error(`Failed to load attempt: ${attemptError.message}`);
         }
         
-        // Verify this attempt belongs to the current user
         if (attemptData.user_id !== userData.user.id) {
           throw new Error('You do not have permission to access this assessment attempt');
         }
         
         setAttempt(attemptData);
         
-        // Fetch assessment details
         const { data: assessmentData, error: assessmentError } = await supabase
           .from('assessments')
           .select('*')
@@ -96,9 +102,12 @@ export default function AssessmentPage({ params }: PageProps) {
           throw new Error(`Failed to load assessment: ${assessmentError.message}`);
         }
         
+        if (assessmentData && assessmentData.title === "Business Valuation Assessment") {
+          assessmentData.title = "Quiet Light Advisor Skills Assessment";
+        }
+        
         setAssessment(assessmentData);
         
-        // Fetch assessment parts
         const { data: partsData, error: partsError } = await supabase
           .from('parts')
           .select('*')
@@ -111,7 +120,6 @@ export default function AssessmentPage({ params }: PageProps) {
         
         setParts(partsData);
         
-        // Add debug logging for parts
         console.log(`[DEBUG-INIT] Loaded ${partsData.length} parts:`, 
           partsData.map(p => ({id: p.id, title: p.title, sequence: p.sequence_order}))
         );
@@ -125,7 +133,6 @@ export default function AssessmentPage({ params }: PageProps) {
     
     fetchData();
 
-    // Add keyboard shortcut to toggle debugger
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         setShowDebugger(prev => !prev);
@@ -143,21 +150,17 @@ export default function AssessmentPage({ params }: PageProps) {
     console.log(`[DEBUG-PAGE] Current part index: ${currentPartIndex}, Total parts: ${parts.length}`);
     console.log(`[DEBUG-PAGE] Parts array:`, JSON.stringify(parts.map(p => ({id: p.id, title: p.title}))));
     
-    // Double-check parts array is valid
     if (!Array.isArray(parts) || parts.length === 0) {
       console.error("[DEBUG-PAGE] Parts array is invalid:", parts);
       return;
     }
     
     if (currentPartIndex < parts.length - 1) {
-      // Show the part transition screen
       setCompletedPartIndex(currentPartIndex);
       setShowPartTransition(true);
     } else {
-      // Complete the assessment
       console.log("[DEBUG-PAGE] This is the final part, completing assessment");
       
-      // Add a timeout to prevent UI lock
       const timeoutId = setTimeout(() => {
         console.warn("[DEBUG-PAGE] Assessment completion timeout - forcing navigation");
         router.push('/assessment/complete');
@@ -170,7 +173,6 @@ export default function AssessmentPage({ params }: PageProps) {
         console.error("[DEBUG-PAGE] Error in handlePartComplete:", error);
         clearTimeout(timeoutId);
         
-        // Force navigation as a fallback
         setTimeout(() => {
           console.log("[DEBUG-PAGE] Forcing navigation after error");
           router.push('/assessment/complete');
@@ -180,17 +182,14 @@ export default function AssessmentPage({ params }: PageProps) {
   };
   
   const handleContinueToNextPart = () => {
-    // Hide the transition screen
     setShowPartTransition(false);
     setIsPartTransitioning(true);
     
-    // Short delay for transition animation
     setTimeout(() => {
       const nextPartIndex = completedPartIndex !== null ? completedPartIndex + 1 : currentPartIndex + 1;
       setCurrentPartIndex(nextPartIndex);
       window.scrollTo(0, 0);
       
-      // Allow time for new content to render before fading back in
       setTimeout(() => {
         setIsPartTransitioning(false);
       }, 300);
@@ -202,7 +201,6 @@ export default function AssessmentPage({ params }: PageProps) {
     try {
       setIsSubmitting(true);
       
-      // Update the attempt to completed
       console.log("[DEBUG-PAGE] Updating assessment_attempts with completed_at");
       const { error } = await supabase
         .from('assessment_attempts')
@@ -216,14 +214,12 @@ export default function AssessmentPage({ params }: PageProps) {
         throw new Error(`Failed to complete assessment: ${error.message}`);
       }
       
-      // Redirect to completion page
       console.log("[DEBUG-PAGE] Successfully completed assessment, redirecting to completion page");
       router.push('/assessment/complete');
     } catch (err) {
       console.error("[DEBUG-PAGE] Error in completeAssessment:", err);
       setError(err instanceof Error ? err.message : 'Failed to complete assessment');
       
-      // Still try to navigate to completion if there was an error
       setTimeout(() => {
         console.log("[DEBUG-PAGE] Forcing navigation after completeAssessment error");
         router.push('/assessment/complete');
@@ -277,7 +273,6 @@ export default function AssessmentPage({ params }: PageProps) {
   
   const currentPart = parts[currentPartIndex];
   
-  // If showing part transition screen
   if (showPartTransition && completedPartIndex !== null && completedPartIndex + 1 < parts.length) {
     const completedPart = parts[completedPartIndex];
     const nextPart = parts[completedPartIndex + 1];
@@ -290,7 +285,7 @@ export default function AssessmentPage({ params }: PageProps) {
           nextPartTitle={nextPart.title}
           nextPartNumber={completedPartIndex + 2}
           totalParts={parts.length}
-          assessmentTitle={assessment?.title || "Assessment"}
+          assessmentTitle={assessment?.title || "Quiet Light Advisor Skills Assessment"}
           onContinue={handleContinueToNextPart}
         />
       </div>
@@ -299,7 +294,6 @@ export default function AssessmentPage({ params }: PageProps) {
   
   return (
     <>
-      {/* Show theme debugger when activated with Ctrl+Shift+D */}
       {showDebugger && <ThemeDebugger />}
       
       <div 
@@ -317,7 +311,7 @@ export default function AssessmentPage({ params }: PageProps) {
               height="h-6"
             />
             <h1 className="text-3xl font-bold text-center mb-10 animate-slide-in-up">
-              {assessment.title}
+              {assessment?.title || "Quiet Light Advisor Skills Assessment"}
             </h1>
           </div>
           

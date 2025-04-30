@@ -229,7 +229,7 @@ export function SingleQuestionView({
           </div>
           {blockTitle && (
             <div className="mt-2 text-sm text-text-light">
-              {blockTitle}
+              {blockTitle.replace(/^Block \d+: /, '')}
             </div>
           )}
         </div>

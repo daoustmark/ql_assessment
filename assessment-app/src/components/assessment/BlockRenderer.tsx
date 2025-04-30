@@ -26,10 +26,17 @@ export function BlockRenderer({
   onBlockComplete,
   onQuestionChange
 }: BlockRendererProps) {
+  // Clean up block title if it has repetitive "Block X:" pattern
+  const cleanBlockTitle = (title: string) => {
+    if (!title) return "";
+    // Remove duplicate "Block X:" patterns
+    return title.replace(/^Block \d+: /, '');
+  };
+
   // If there are no questions in this block
   if (!block.questions || block.questions.length === 0) {
     return (
-      <Card colorAccent="blue" className="animate-slide-in-up">
+      <Card className="animate-slide-in-up bg-blue-50">
         <div className="flex items-center gap-2 text-amber-600">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -59,7 +66,7 @@ export function BlockRenderer({
         onAnswer={onAnswer}
         onVideoUpload={onVideoUpload}
         onComplete={onBlockComplete}
-        blockTitle={block.title}
+        blockTitle={cleanBlockTitle(block.title)}
         blockDescription={block.description}
         userId={userId}
         attemptId={attemptId}
@@ -77,7 +84,7 @@ export function BlockRenderer({
       const scenario = block.scenarios?.[0];
       if (!scenario) {
         return (
-          <Card colorAccent="blue" className="animate-slide-in-up">
+          <Card className="animate-slide-in-up bg-blue-50">
             <div className="flex items-center gap-2 text-red-500">
               <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -92,7 +99,7 @@ export function BlockRenderer({
       const relatedQuestion = questions[0];
       
       return (
-        <Card colorAccent="blue" className="animate-slide-in-up">
+        <Card className="animate-slide-in-up bg-blue-50">
           <ScenarioQuestion
             block={block}
             scenario={scenario}
@@ -106,7 +113,7 @@ export function BlockRenderer({
       // Multiple scenarios with related questions
       if (!block.scenarios || block.scenarios.length === 0) {
         return (
-          <Card colorAccent="blue" className="animate-slide-in-up">
+          <Card className="animate-slide-in-up bg-blue-50">
             <div className="flex items-center gap-2 text-red-500">
               <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -130,11 +137,13 @@ export function BlockRenderer({
       
       return (
         <Card 
-          colorAccent="blue" 
-          title={block.title}
-          subtitle={block.description}
           className="animate-slide-in-up"
         >
+          <div className="mb-4">
+            <h3 className="text-xl font-medium mb-1">{cleanBlockTitle(block.title)}</h3>
+            {block.description && <p className="text-text-light text-sm">{block.description}</p>}
+          </div>
+          
           <div className="space-y-12">
             {sortedScenarios.map((scenario, index) => {
               // Try to match questions by sequence_order first, then fall back to array index
@@ -189,7 +198,7 @@ export function BlockRenderer({
           onAnswer={onAnswer}
           onVideoUpload={onVideoUpload}
           onComplete={onBlockComplete}
-          blockTitle={block.title}
+          blockTitle={cleanBlockTitle(block.title)}
           blockDescription={block.description}
           userId={userId}
           attemptId={attemptId}
