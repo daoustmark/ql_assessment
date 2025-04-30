@@ -35,4 +35,8 @@ yarn-error.log*
 
 # MongoDB
 .mongodb/
-*.mongodb 
+*.mongodb
+
+# Cursor
+.cursor/
+*.mdc 
