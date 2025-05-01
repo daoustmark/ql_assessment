@@ -75,14 +75,13 @@ export function QuestionNavigation({
           </div>
         )}
         <Button
-          variant={isLastQuestion ? "secondary" : "primary"}
+          variant="ghost"
           onClick={handleClick}
           isLoading={isSubmitting}
           disabled={!isValid || isSubmitting}
           icon={isLastQuestion ? <Icon name="check" size="small" /> : <Icon name="arrow-right" size="small" />}
           iconPosition="right"
-          className="min-w-[120px]"
-          animated={true}
+          className="hover:bg-hover"
         >
           {isLastQuestion ? 'Submit' : 'Next'}
         </Button>

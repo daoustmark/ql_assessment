@@ -21,6 +21,7 @@ export { Tooltip } from './Tooltip';
 
 // Feedback & Status Components
 export { ProgressBar } from './ProgressBar';
+export { StepperProgress } from './StepperProgress';
 export { LoadingSpinner } from './LoadingSpinner';
 export { EmptyState } from './EmptyState';
 export { Icon } from './Icon';

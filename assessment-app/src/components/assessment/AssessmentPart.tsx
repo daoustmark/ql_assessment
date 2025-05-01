@@ -19,9 +19,10 @@ interface AssessmentPartProps {
   totalParts: number;
   attemptId: string;
   onComplete: () => void;
+  onBlockChange?: (blockIndex: number, questionIndex: number, block: any) => void;
 }
 
-export function AssessmentPart({ part, totalParts, attemptId, onComplete }: AssessmentPartProps) {
+export function AssessmentPart({ part, totalParts, attemptId, onComplete, onBlockChange }: AssessmentPartProps) {
   const [blocks, setBlocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +227,9 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
       // Set the completed block index to show in the transition screen
       setCompletedBlockIndex(currentBlockIndex);
       setShowBlockTransition(true);
+      if (onBlockChange) {
+        onBlockChange(currentBlockIndex + 1, 0, blocks[currentBlockIndex + 1]);
+      }
     } else {
       handleSubmit();
     }
@@ -238,18 +242,28 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
     // Move to the next block
     setCurrentBlockIndex(currentBlockIndex + 1);
     setCurrentQuestionIndex(0);
+    if (onBlockChange) {
+      onBlockChange(currentBlockIndex + 1, 0, blocks[currentBlockIndex + 1]);
+    }
     window.scrollTo(0, 0);
   };
 
   const prevBlock = () => {
     if (currentBlockIndex > 0) {
       setCurrentBlockIndex(currentBlockIndex - 1);
+      setCurrentQuestionIndex(0);
+      if (onBlockChange) {
+        onBlockChange(currentBlockIndex - 1, 0, blocks[currentBlockIndex - 1]);
+      }
       window.scrollTo(0, 0);
     }
   };
 
   const handleQuestionChange = (index: number) => {
     setCurrentQuestionIndex(index);
+    if (onBlockChange) {
+      onBlockChange(currentBlockIndex, index, blocks[currentBlockIndex]);
+    }
   };
 
   if (loading) {
@@ -307,48 +321,6 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete }: Asse
 
   return (
     <div className="space-y-8">
-      {/* Header with progress indicators in two columns */}
-      <div className="bg-white rounded-lg p-5 shadow-md border border-gray-200">
-        {/* Two-column layout for progress bars */}
-        <div className="grid grid-cols-2 gap-4">
-          {/* Left column: Section Progress */}
-          <div>
-            <ProgressBar 
-              current={currentBlockIndex + 1} 
-              total={blocks.length} 
-              variant="blue" 
-              height="h-4"
-              label="Section Progress"
-            />
-            <p className="text-sm text-gray-600 mt-1">{part.title}</p>
-          </div>
-          
-          {/* Right column: Question Block Progress */}
-          <div>
-            <ProgressBar 
-              current={currentQuestionIndex + 1} 
-              total={currentBlock?.questions?.length || 1} 
-              variant="gradient" 
-              height="h-4"
-              label="Question Progress"
-            />
-            <p className="text-sm text-gray-600 mt-1">
-              {currentBlock?.title ? `Block ${currentBlockIndex + 1}: ${currentBlock.title.replace(/^Block \d+: /, '')}` : "Current Block"}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Section Title */}
-      <div className="mb-2">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Part {part.sequence_order}: {part.title}
-        </h1>
-        <p className="text-gray-700 mt-2">
-          {part.description}
-        </p>
-      </div>
-
       {/* Current Block */}
       <BlockRenderer
         block={currentBlock}

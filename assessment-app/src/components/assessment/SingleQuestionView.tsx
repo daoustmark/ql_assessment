@@ -203,19 +203,17 @@ export function SingleQuestionView({
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      {/* Progress indicator */}
-      <div className="mb-2">
-        <ProgressBar 
-          current={currentQuestionIndex + 1} 
-          total={sortedQuestions.length} 
-          variant="primary"
-          height="h-1.5"
-          label="Question Progress"
-        />
-      </div>
+      {/* Block Title */}
+      {blockTitle && (
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 mb-2">
+          <h2 className="text-xl font-semibold">
+            {blockTitle.replace(/^Block \d+: /, '')}
+          </h2>
+        </div>
+      )}
       
       <Card 
-        className={`transition-opacity duration-slow ${isTransitioning ? 'opacity-0' : 'opacity-100'} animate-slide-in-up shadow-floating border-subtle`}
+        className={`transition-opacity duration-slow ${isTransitioning ? 'opacity-0' : 'opacity-100'} animate-slide-in-up bg-white rounded-lg shadow-sm border border-gray-200`}
         padding="medium"
         elevation="floating"
       >
@@ -227,11 +225,6 @@ export function SingleQuestionView({
           <div className="text-question font-semibold text-text-heading leading-question tracking-heading">
             {currentQuestion.question_text}
           </div>
-          {blockTitle && (
-            <div className="mt-2 text-sm text-text-light">
-              {blockTitle.replace(/^Block \d+: /, '')}
-            </div>
-          )}
         </div>
         
         {/* Answer options */}

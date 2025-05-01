@@ -46,12 +46,12 @@ export function MCQQuestion({ question, answer, onAnswer, onNext }: MCQQuestionP
           <div
             key={option.id}
             className={`
-              question-option rounded-lg border-2 
+              question-option rounded-lg border 
               ${selectedOption === option.id 
-                ? 'border-selected bg-hover shadow-card' 
-                : 'border-unselected hover:border-primary hover:bg-hover'}
-              p-5 pl-6 cursor-pointer flex items-center transition-all duration-base
-              hover:shadow-card hover:-translate-y-0.5
+                ? 'border-nomad-blue bg-nomad-blue-50 shadow-sm' 
+                : 'border-gray-200 hover:border-nomad-blue-200 hover:bg-gray-50'}
+              p-5 cursor-pointer flex items-center transition-all duration-300
+              hover:shadow-sm
             `}
             onClick={() => handleChange(option.id)}
             tabIndex={0}
@@ -61,12 +61,12 @@ export function MCQQuestion({ question, answer, onAnswer, onNext }: MCQQuestionP
               if (e.key === ' ' || e.key === 'Enter') handleChange(option.id);
             }}
           >
-            <div className="radio-button__checkmark w-5 h-5 rounded-full mr-4 flex-shrink-0 flex items-center justify-center
-              border-2 transition-all duration-base
+            <div className={`radio-button__checkmark w-5 h-5 rounded-full mr-4 flex-shrink-0 flex items-center justify-center
+              border transition-all duration-300
               ${selectedOption === option.id 
-                ? 'border-selected bg-selected' 
-                : 'border-unselected bg-card'}
-            ">
+                ? 'border-nomad-blue bg-nomad-blue' 
+                : 'border-gray-400 bg-white'}
+            `}>
               {selectedOption === option.id && (
                 <div className="w-2 h-2 rounded-full bg-white animate-fade-in"></div>
               )}
