@@ -75,28 +75,68 @@ export function BlockRenderer({
     );
   }
 
+  // Determine if this is a timed response scenario
+  const isTimedResponse = block.block_type === 'scenario' && 
+    (block.description === 'timed-scenario-response' || block.description?.includes('Timed'));
+  
   // Handle specialized block types that should remain as they are
   switch (block.block_type) {
     case 'scenario':
     case 'email_scenario':
     case 'video_scenario':
       // Get the first scenario
-      const scenario = block.scenarios?.[0];
+      console.log("[DEBUG] Block data:", block);
+      console.log("[DEBUG] Block type:", block.block_type);
+      console.log("[DEBUG] Scenarios:", block.scenarios);
+      console.log("[DEBUG] Questions:", block.questions);
+      console.log("[DEBUG] Is timed response scenario:", isTimedResponse);
+      
+      // Try to find a scenario or create a placeholder scenario
+      let scenario = block.scenarios?.[0];
+      
+      // For timed scenarios especially, we must have a scenario object
       if (!scenario) {
+        console.warn(`[DEBUG] Creating placeholder scenario for block ${block.id}`);
+        // Create a fake scenario with the block title as the text
+        scenario = {
+          id: -1, // Placeholder ID
+          block_id: block.id,
+          scenario_text: block.title + "\n\n" + (block.description || ""),
+          sequence_order: 1,
+          created_at: new Date().toISOString()
+        };
+      }
+      
+      // For timed responses, we need a textarea question
+      // For regular scenarios, we need a multiple-choice question
+      const questionType = isTimedResponse ? 'textarea' : 'multiple-choice';
+      
+      // Log to diagnose
+      console.log(`[DEBUG] Looking for question type: ${questionType}`);
+      if (block.questions) {
+        block.questions.forEach(q => {
+          console.log(`[DEBUG] Question ${q.id}: type=${q.question_type}, text=${q.question_text}`);
+        });
+      }
+      
+      // Find the correct question based on type
+      const relatedQuestion = block.questions?.find(q => q.question_type === questionType) || block.questions?.[0];
+      
+      if (!relatedQuestion) {
+        console.error(`[ERROR] No suitable question found for block ${block.id}`);
         return (
           <Card className="animate-slide-in-up bg-blue-50">
             <div className="flex items-center gap-2 text-red-500">
               <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span>Error: Scenario data not found</span>
+              <span>Error: No related question found for this scenario</span>
             </div>
           </Card>
         );
       }
       
-      // Find the corresponding question (we already verified questions exist)
-      const relatedQuestion = questions[0];
+      console.log(`[DEBUG] Using question ${relatedQuestion.id} (${relatedQuestion.question_type}) for scenario ${scenario.id}`);
       
       return (
         <Card className="animate-slide-in-up bg-blue-50">
@@ -105,6 +145,8 @@ export function BlockRenderer({
             scenario={scenario}
             answer={answers[relatedQuestion.id]}
             onAnswer={(answer) => onAnswer(relatedQuestion.id, answer)}
+            question={relatedQuestion}
+            onBlockComplete={onBlockComplete}
           />
         </Card>
       );
@@ -182,6 +224,8 @@ export function BlockRenderer({
                   scenario={scenario}
                   answer={answers[relatedQuestion.id]}
                   onAnswer={(answer) => onAnswer(relatedQuestion.id, answer)}
+                  question={relatedQuestion}
+                  onBlockComplete={onBlockComplete}
                 />
               );
             })}

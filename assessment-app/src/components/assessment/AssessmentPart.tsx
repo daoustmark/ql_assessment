@@ -64,6 +64,12 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete, onBloc
               sequence_order, 
               is_required,
               mcq_options(id, option_text, sequence_order)
+            ),
+            scenarios(
+              id,
+              scenario_text,
+              sequence_order,
+              scenario_options(id, option_text, sequence_order)
             )
           `)
           .eq('part_id', part.id)
@@ -71,6 +77,44 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete, onBloc
 
         if (blocksError) throw blocksError;
         
+        // For blocks with scenario type but missing scenarios, fetch them separately
+        const scenarioBlocks = blocksData?.filter(block => 
+          (block.block_type === 'scenario' || block.block_type?.includes('scenario')) && 
+          (!block.scenarios || block.scenarios.length === 0)
+        ) || [];
+
+        // If we have scenario blocks missing scenarios data, fetch them
+        if (scenarioBlocks.length > 0) {
+          console.log(`[DEBUG] Found ${scenarioBlocks.length} blocks missing scenario data, fetching...`);
+          
+          // Process blocks one by one to make sure each gets proper scenarios
+          for (const block of scenarioBlocks) {
+            const { data: scenariosData, error: scenariosError } = await supabase
+              .from('scenarios')
+              .select(`
+                id,
+                scenario_text,
+                sequence_order,
+                scenario_options(id, option_text, sequence_order)
+              `)
+              .eq('block_id', block.id)
+              .order('sequence_order');
+              
+            if (scenariosError) {
+              console.error(`Error fetching scenarios for block ${block.id}:`, scenariosError);
+              continue;
+            }
+            
+            if (scenariosData && scenariosData.length > 0) {
+              // Update this block with the fetched scenarios
+              block.scenarios = scenariosData;
+              console.log(`[DEBUG] Added ${scenariosData.length} scenarios to block ${block.id}`);
+            } else {
+              console.warn(`[DEBUG] No scenarios found for block ${block.id}, type: ${block.block_type}`);
+            }
+          }
+        }
+
         // Fetch existing answers for this attempt
         const { data: answersData, error: answersError } = await supabase
           .from('user_answers')
@@ -123,91 +167,110 @@ export function AssessmentPart({ part, totalParts, attemptId, onComplete, onBloc
   const handleSubmit = async () => {
     console.log("[DEBUG-PART] Starting handleSubmit");
     setSubmitting(true);
-    
     try {
       const supabase = createClient();
       console.log("[DEBUG-PART] Creating supabase client completed");
       
-      // Track how many answers we're attempting to save
-      const totalAnswers = Object.entries(answers).length;
-      console.log(`[DEBUG-PART] Processing ${totalAnswers} answers`);
+      // Get the current block and question
+      const currentBlock = blocks[currentBlockIndex];
+      if (!currentBlock || !currentBlock.questions) {
+        console.error("[DEBUG-PART] Current block or questions not found");
+        setSubmitting(false);
+        return;
+      }
+      
+      // Get all questions in the current block
+      const blockQuestions = currentBlock.questions;
+      console.log(`[DEBUG-PART] Processing answers for current block only (${blockQuestions.length} questions)`);
       
       let processedCount = 0;
       
-      // Insert or update answers
-      for (const [questionId, answerData] of Object.entries(answers)) {
+      // Only process questions from the current block
+      for (const question of blockQuestions) {
+        const questionId = question.id.toString();
+        const answerData = answers[questionId];
+        
+        // Skip if no answer data exists for this question
+        if (!answerData) {
+          console.log(`[DEBUG-PART] No answer data for question ${questionId}, skipping`);
+          continue;
+        }
+        
         try {
+          // Build payload based on question type
+          let payload: any = {};
+          switch (question.question_type) {
+            case 'multiple-choice':
+              payload.selected_option_id = answerData.mcq_option_id;
+              break;
+            case 'textarea':
+            case 'written':
+            case 'email':
+              payload.answer_text = answerData.text_answer;
+              break;
+            case 'likert':
+              payload.likert_value = answerData.likert_rating;
+              break;
+            case 'video':
+              payload.video_response_path = answerData.video_response_path;
+              break;
+            default:
+              // fallback: only send text_response if present
+              if (answerData.text_answer) payload.answer_text = answerData.text_answer;
+          }
+          
+          // Skip if no valid data to save
+          if (Object.keys(payload).length === 0) {
+            console.log(`[DEBUG-PART] No valid data for question ${questionId}, skipping`);
+            continue;
+          }
+          
           if (answerData.id) {
             // Update existing answer
             console.log(`[DEBUG-PART] Updating answer for question ${questionId}`);
             const { error: updateError } = await supabase
               .from('user_answers')
-              .update({
-                text_response: answerData.text_answer,
-                selected_mcq_option_id: answerData.mcq_option_id,
-                likert_score: answerData.likert_rating,
-                video_response_path: answerData.video_response_path,
-                updated_at: new Date().toISOString()
-              })
+              .update(payload)
               .eq('id', answerData.id);
-              
             if (updateError) {
               console.error('[DEBUG-PART] Error updating answer:', updateError);
               throw new Error(`Failed to update answer: ${updateError.message}`);
             }
           } else {
             // Insert new answer
+            payload.attempt_id = numericAttemptId;
+            payload.question_id = parseInt(questionId);
             console.log(`[DEBUG-PART] Inserting new answer for question ${questionId}`);
             const { error: insertError } = await supabase
               .from('user_answers')
-              .insert({
-                attempt_id: numericAttemptId,
-                question_id: parseInt(questionId),
-                text_response: answerData.text_answer,
-                selected_mcq_option_id: answerData.mcq_option_id,
-                likert_score: answerData.likert_rating,
-                video_response_path: answerData.video_response_path
-              });
-              
+              .insert(payload);
             if (insertError) {
               console.error('[DEBUG-PART] Error inserting answer:', insertError);
               throw new Error(`Failed to insert answer: ${insertError.message}`);
             }
           }
-          
           processedCount++;
-          console.log(`[DEBUG-PART] Processed ${processedCount}/${totalAnswers} answers`);
+          console.log(`[DEBUG-PART] Processed ${processedCount} answers`);
         } catch (answerError) {
           console.error(`[DEBUG-PART] Error processing answer for question ${questionId}:`, answerError);
-          // Continue with other answers instead of failing everything
         }
       }
       
-      console.log(`[DEBUG-PART] Answer processing complete. Successfully processed ${processedCount}/${totalAnswers} answers`);
+      console.log(`[DEBUG-PART] Answer processing complete. Successfully processed ${processedCount} answers`);
       
-      // Call onComplete to move to the next part - with timeout protection
-      console.log("[DEBUG-PART] All answers saved, now calling onComplete to move to next part");
-      
-      // Prevent Spinner from getting stuck by ensuring submitting state is reset
       setTimeout(() => {
         if (submitting) {
-          console.log("[DEBUG-PART] Force resetting submitting state after 8 seconds");
           setSubmitting(false);
         }
       }, 8000);
       
-      // Always update the submission state after a short delay
       setTimeout(() => {
         setSubmitting(false);
       }, 1000);
       
-      // Call the completion callback
       try {
-        console.log("[DEBUG-PART] Calling onComplete to move to next part");
-        // Make sure onComplete is valid before calling it
         if (typeof onComplete === 'function') {
-          await Promise.resolve(onComplete()); // Use Promise.resolve to handle both sync and async functions
-          console.log("[DEBUG-PART] onComplete called successfully - should be moving to next part now");
+          await Promise.resolve(onComplete());
         } else {
           console.error("[DEBUG-PART] onComplete is not a function:", typeof onComplete);
         }

@@ -90,47 +90,50 @@ export function SingleQuestionView({
         setIsTransitioning(false);
       }, 300);
     } else {
-      // This is the final question - we'll submit
-      console.log("[DEBUG] Attempting to submit final answer");
+      // This is the final question - save only the current answer with correct fields
+      if (currentQuestion) {
+        let answerPayload: Partial<UserAnswer> = {};
+        switch (currentQuestion.question_type) {
+          case 'multiple-choice':
+            answerPayload = { selected_option_id: currentAnswer?.selected_option_id };
+            break;
+          case 'textarea':
+          case 'written':
+            answerPayload = { text_answer: currentAnswer?.text_answer };
+            break;
+          case 'likert':
+            answerPayload = { likert_rating: currentAnswer?.likert_rating };
+            break;
+          case 'video':
+            answerPayload = { video_response_path: currentAnswer?.video_response_path };
+            break;
+          default:
+            // fallback: send only text_answer if present
+            if (currentAnswer?.text_answer) answerPayload = { text_answer: currentAnswer.text_answer };
+        }
+        onAnswer(currentQuestion.id, answerPayload);
+      }
       setIsSubmitting(true);
-      
       // Add a safety timeout in case the submission takes too long
       const safetyTimeout = setTimeout(() => {
-        console.log("[DEBUG] Submission timeout triggered - forcing state reset");
         setIsSubmitting(false);
-      }, 30000); // 30 seconds timeout
-      
-      // Create a promise that resolves after the onComplete callback
+      }, 30000);
       const handleCompletion = async () => {
         try {
-          console.log("[DEBUG] Calling onComplete");
-          await Promise.resolve(onComplete()); // Await the callback in case it's async
-          console.log("[DEBUG] onComplete called successfully");
+          await Promise.resolve(onComplete());
           clearTimeout(safetyTimeout);
-          console.log("[DEBUG] Submission flow completed with result: completed");
-          
-          // Force state reset to avoid UI being stuck
           setTimeout(() => {
-            console.log("[DEBUG] Forcing UI update after submit");
             setIsSubmitting(false);
           }, 500);
           return "completed";
         } catch (error) {
-          console.error("[DEBUG] Error in completion callback:", error);
           clearTimeout(safetyTimeout);
           setIsSubmitting(false);
           return "error";
         }
       };
-      
-      // Set another timeout to prevent getting stuck in a pending state
-      setTimeout(() => {
-        console.log("[DEBUG] Internal promise timeout reached");
-      }, 5000);
-      
-      handleCompletion().then(result => {
-        console.log("[DEBUG] Submission flow completed with result:", result);
-      });
+      setTimeout(() => {}, 5000);
+      handleCompletion();
     }
   };
 

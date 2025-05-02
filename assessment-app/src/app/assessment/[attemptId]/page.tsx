@@ -7,6 +7,7 @@ import { AssessmentPart } from '@/components/assessment';
 import { PartTransition } from '@/components/assessment/PartTransition';
 import { LoadingSpinner, ProgressBar, Card, ThemeDebugger } from '@/components/ui';
 import { StepperProgress } from '@/components/ui/StepperProgress';
+import { DevMode } from '@/components/assessment/DevMode';
 
 interface PageProps {
   params: {
@@ -174,7 +175,16 @@ export default function AssessmentPage({ params }: PageProps) {
       try {
         const { data: blocksData, error: blocksError } = await supabase
           .from('blocks')
-          .select('*')
+          .select(`
+            *,
+            questions(*),
+            scenarios(
+              id,
+              scenario_text,
+              sequence_order,
+              scenario_options(*)
+            )
+          `)
           .eq('part_id', parts[currentPartIndex].id)
           .order('sequence_order');
           
@@ -182,6 +192,45 @@ export default function AssessmentPage({ params }: PageProps) {
           throw new Error(`Failed to load blocks: ${blocksError.message}`);
         }
         
+        // For blocks with scenario type but missing scenarios, fetch them separately
+        const scenarioBlocks = blocksData?.filter(block => 
+          (block.block_type === 'scenario' || block.block_type?.includes('scenario')) && 
+          (!block.scenarios || block.scenarios.length === 0)
+        ) || [];
+
+        // If we have scenario blocks missing scenarios data, fetch them
+        if (scenarioBlocks.length > 0) {
+          console.log(`[DEBUG] Found ${scenarioBlocks.length} blocks missing scenario data, fetching...`);
+          
+          // Process blocks one by one to make sure each gets proper scenarios
+          for (const block of scenarioBlocks) {
+            const { data: scenariosData, error: scenariosError } = await supabase
+              .from('scenarios')
+              .select(`
+                id,
+                scenario_text,
+                sequence_order,
+                scenario_options(*)
+              `)
+              .eq('block_id', block.id)
+              .order('sequence_order');
+              
+            if (scenariosError) {
+              console.error(`Error fetching scenarios for block ${block.id}:`, scenariosError);
+              continue;
+            }
+            
+            if (scenariosData && scenariosData.length > 0) {
+              // Update this block with the fetched scenarios
+              block.scenarios = scenariosData;
+              console.log(`[DEBUG] Added ${scenariosData.length} scenarios to block ${block.id}`);
+            } else {
+              console.warn(`[DEBUG] No scenarios found for block ${block.id}, type: ${block.block_type}`);
+            }
+          }
+        }
+        
+        console.log(`[DEBUG] Fetched ${blocksData?.length || 0} blocks for part ${parts[currentPartIndex].id}`);
         setBlocks(blocksData || []);
         setCurrentBlock(blocksData?.[0] || null);
         setCurrentBlockIndex(0);
@@ -287,25 +336,22 @@ export default function AssessmentPage({ params }: PageProps) {
   
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center assessment-bg">
-        <div className="animate-fade-in">
-          <LoadingSpinner size="large" label="Loading assessment..." />
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <LoadingSpinner label="Loading assessment..." />
       </div>
     );
   }
   
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center assessment-bg p-4">
-        <Card className="max-w-lg w-full animate-slide-in-up">
-          <div className="flex items-center gap-3 text-red-500 mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <Card className="max-w-2xl w-full">
+          <div className="flex items-center gap-2 text-error">
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <h2 className="text-xl font-medium">Error</h2>
+            <span>{error}</span>
           </div>
-          <p className="text-bespoke-navy">{error}</p>
         </Card>
       </div>
     );
@@ -334,81 +380,68 @@ export default function AssessmentPage({ params }: PageProps) {
     const nextPart = parts[completedPartIndex + 1];
     
     return (
-      <div className="min-h-screen assessment-bg pt-8 pb-16 px-4" data-theme="assessment">
-        <PartTransition
-          completedPartTitle={completedPart.title}
-          completedPartNumber={completedPartIndex + 1}
-          nextPartTitle={nextPart.title}
-          nextPartNumber={completedPartIndex + 2}
-          totalParts={parts.length}
-          assessmentTitle={assessment?.title || "Quiet Light Advisor Skills Assessment"}
-          onContinue={handleContinueToNextPart}
-        />
-      </div>
+      <>
+        <div className="min-h-screen assessment-bg pt-8 pb-16 px-4" data-theme="assessment">
+          <PartTransition
+            completedPartTitle={completedPart.title}
+            completedPartNumber={completedPartIndex + 1}
+            nextPartTitle={nextPart.title}
+            nextPartNumber={completedPartIndex + 2}
+            totalParts={parts.length}
+            assessmentTitle={assessment?.title || "Quiet Light Advisor Skills Assessment"}
+            onContinue={handleContinueToNextPart}
+          />
+        </div>
+        
+        {parts.length > 0 && (
+          <DevMode 
+            parts={parts}
+            attemptId={attemptId}
+            currentPartIndex={currentPartIndex}
+            onPartSelect={setCurrentPartIndex}
+          />
+        )}
+      </>
     );
   }
   
   return (
-    <div className="min-h-screen flex flex-col items-center p-4">
-      <div className="w-full max-w-5xl">
-        {/* Header */}
-        <h1 className="text-3xl font-bold text-bespoke-navy mb-4">
-          {assessment?.title}
-        </h1>
-
-        {/* Overall Progress - Stepper Style */}
-        <div className="mb-6 bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-          <StepperProgress 
-            steps={parts.map(part => part.title)}
-            currentStep={currentPartIndex}
-          />
-        </div>
-
-        {/* Part Title - Centered */}
-        <h2 className="text-2xl font-semibold text-bespoke-navy mb-4 text-center">
-          {parts[currentPartIndex]?.title}
-        </h2>
-
-        {/* Side by Side Progress Bars in a Card */}
-        <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 mb-6">
-          <div className="grid grid-cols-2 gap-8">
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Block Progress</span>
-                <span className="text-sm font-medium">{currentBlockIndex} of {blocks.length}</span>
-              </div>
-              <ProgressBar
-                current={currentBlockIndex}
-                total={blocks.length}
-              />
-            </div>
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Question Progress</span>
-                <span className="text-sm font-medium">{currentQuestionIndex} of {currentBlock?.questions?.length || 1}</span>
-              </div>
-              <ProgressBar
-                current={currentQuestionIndex}
-                total={currentBlock?.questions?.length || 1}
-              />
-            </div>
+    <>
+      <div className="min-h-screen flex flex-col items-center p-4">
+        <div className="assessment-container w-full max-w-5xl mx-auto">
+          {/* Assessment Header */}
+          <div className="assessment-header py-4">
+            <h1 className="text-xl md:text-2xl font-bold text-center text-bespoke-navy mb-2">
+              {assessment?.title || "Quiet Light Advisor Skills Assessment"}
+            </h1>
           </div>
+          
+          {/* Part Content */}
+          <div className={`transition-opacity duration-300 ${isPartTransitioning ? 'opacity-0' : 'opacity-100'}`}>
+            {parts.length > 0 && (
+              <AssessmentPart
+                part={parts[currentPartIndex]}
+                totalParts={parts.length}
+                attemptId={attemptId.toString()}
+                onComplete={handlePartComplete}
+                onBlockChange={handleBlockChange}
+              />
+            )}
+          </div>
+          
+          {/* Debugger */}
+          {showDebugger && <ThemeDebugger />}
         </div>
-
-        {/* Assessment Content */}
-        <div className="animate-fade-in">
-          <AssessmentPart
-            part={parts[currentPartIndex]}
-            totalParts={parts.length}
-            attemptId={attemptId.toString()}
-            onComplete={handlePartComplete}
-            onBlockChange={handleBlockChange}
-          />
-        </div>
-
-        {/* Debugger */}
-        {showDebugger && <ThemeDebugger />}
       </div>
-    </div>
+      
+      {parts.length > 0 && (
+        <DevMode 
+          parts={parts}
+          attemptId={attemptId}
+          currentPartIndex={currentPartIndex}
+          onPartSelect={setCurrentPartIndex}
+        />
+      )}
+    </>
   );
 } 
