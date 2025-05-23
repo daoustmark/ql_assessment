@@ -3,38 +3,471 @@ description:
 globs: 
 alwaysApply: true
 ---
-# MDC Context: 00 - Project Goal & Tech Stack (Revised w/ Structure)
+# MDC Context: 00 - Project Goal & Tech Stack (Revised - Current State)
 
-## Goal
+## Current Project Status
 
-Build the assessment app defined in `questions.json`. Users log in, take the multi-part test, answers (including video) are saved to Supabase.
+✅ **COMPLETED:**
+- Database is fully seeded with assessment content
+- Database schema is established and functional
+- Supabase project is configured and connected
 
-## Core Tech Stack
+🎯 **CURRENT GOAL:**
+Build the assessment taking tool that integrates with the existing seeded database, focusing on user experience and proper data handling.
 
--   **Framework:** Next.js (App Router) w/ TypeScript (`src/` directory)
--   **Backend/DB:** Supabase (Postgres, Auth, Storage)
--   **Styling:** Tailwind CSS + daisyUI
--   **AI Agent:** Cursor.ai
+## Core Tech Stack (Updated)
 
-## Defined Directory Structure (Key Areas)
+- **Framework:** Next.js (App Router) w/ TypeScript (`src/` directory)
+- **Backend/DB:** Supabase (Postgres, Auth, Storage) - **ALREADY SEEDED**
+- **Styling:** Tailwind CSS + **shadcn/ui** (NOT daisyUI)
+- **AI Agent:** Cursor.ai
 
--   `src/app/`: Routes & Pages
--   `src/components/`: Reusable UI (broken down by feature: `auth`, `assessment`, `ui`)
--   `src/lib/`: Utilities, Supabase clients (`supabase/client.ts`, `supabase/admin.ts`)
--   `src/types/`: Shared TypeScript definitions
--   `scripts/`: Database seeding (`seedDatabase.ts`)
--   `supabase/migrations/`: Database schema SQL files
--   `src/middleware.ts`: Authentication route protection
+## Defined Directory Structure
 
-## High-Level Plan (Refined)
+```
+src/
+├── app/                     # Next.js App Router pages
+│   ├── (auth)/             # Auth routes: login, signup
+│   ├── assessment/         # Assessment taking flow
+│   │   └── [attemptId]/    # Dynamic assessment attempt pages
+│   ├── dashboard/          # User dashboard
+│   └── layout.tsx          # Root layout
+├── components/             # Reusable UI components
+│   ├── auth/              # Authentication forms
+│   ├── assessment/        # Assessment-specific components
+│   └── ui/                # shadcn/ui components
+├── lib/                   # Utilities and configurations
+│   ├── supabase/          # Supabase client configurations
+│   └── utils.ts           # Utility functions
+├── types/                 # TypeScript type definitions
+└── middleware.ts          # Route protection
+```
 
-1.  Setup Project & Supabase CLI (`01_*`)
-2.  Define DB Schema via Migration (`02_*`, place SQL in `supabase/migrations/`)
-3.  Seed the DB (`03_*`, script in `scripts/`)
-4.  Implement Authentication (`04_*`, using `src/components/auth/`, `src/app/(auth)/`, `src/middleware.ts`)
-5.  Build Core Assessment Flow (`05_*`, likely in `src/app/assessment/[attemptId]/page.tsx` and `src/components/assessment/`)
-6.  Create UI Components (`06_*` to `09_*`, place in `src/components/assessment/`)
-7.  Integrate Video Upload (`09_*`, using `Supabase Storage` and `src/components/assessment/VideoRecorder.tsx`)
-8.  Style & Deploy (`10_*`)
+## Complete Database Schema (ALREADY SEEDED & OPERATIONAL)
 
-*This structure provides clear homes for different code types, reducing ambiguity for the AI.*
+```sql
+-- Main assessment table
+CREATE TABLE assessments (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Assessment parts/sections
+CREATE TABLE parts (
+    id SERIAL PRIMARY KEY,
+    assessment_id INTEGER NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    sequence_order INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Content blocks within parts
+CREATE TABLE blocks (
+    id SERIAL PRIMARY KEY,
+    part_id INTEGER NOT NULL REFERENCES parts(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    block_type VARCHAR(100) NOT NULL, -- 'multiple_choice', 'email_scenario', 'video_scenario', 'ethical_scenario', etc.
+    sequence_order INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Individual questions
+CREATE TABLE questions (
+    id SERIAL PRIMARY KEY,
+    block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    question_type VARCHAR(100) NOT NULL, -- 'multiple_choice', 'email_response', 'video_response', 'likert_scale', 'essay', etc.
+    sequence_order INTEGER NOT NULL,
+    is_required BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Multiple choice options
+CREATE TABLE mcq_options (
+    id SERIAL PRIMARY KEY,
+    question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    option_text TEXT NOT NULL,
+    sequence_order INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Scenario-based questions (alternative structure)
+CREATE TABLE scenarios (
+    id SERIAL PRIMARY KEY,
+    block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+    scenario_text TEXT NOT NULL,
+    sequence_order INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Options for scenario questions
+CREATE TABLE scenario_options (
+    id SERIAL PRIMARY KEY,
+    scenario_id INTEGER NOT NULL REFERENCES scenarios(id) ON DELETE CASCADE,
+    option_text TEXT NOT NULL,
+    sequence_order INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- User assessment attempts
+CREATE TABLE assessment_attempts (
+    id SERIAL PRIMARY KEY,
+    assessment_id INTEGER NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+    user_id VARCHAR(255), -- Could be UUID or string depending on auth system
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    current_part_id INTEGER REFERENCES parts(id),
+    auth_users_id VARCHAR(255) -- For Supabase Auth integration
+);
+
+-- User responses to questions
+CREATE TABLE user_answers (
+    id SERIAL PRIMARY KEY,
+    attempt_id INTEGER NOT NULL REFERENCES assessment_attempts(id) ON DELETE CASCADE,
+    question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    mcq_option_id INTEGER REFERENCES mcq_options(id),
+    scenario_id INTEGER REFERENCES scenarios(id),
+    scenario_option_id INTEGER REFERENCES scenario_options(id),
+    text_answer TEXT, -- For essay/email responses
+    likert_rating INTEGER CHECK (likert_rating >= 1 AND likert_rating <= 5), -- For 1-5 scale questions
+    video_response_path VARCHAR(255), -- For video upload responses
+    answered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+### Database Relationships
+```
+assessments (1) -> parts (many)
+parts (1) -> blocks (many) 
+blocks (1) -> questions (many)
+questions (1) -> mcq_options (many)
+blocks (1) -> scenarios (many) [alternative to questions]
+scenarios (1) -> scenario_options (many)
+assessments (1) -> assessment_attempts (many)
+assessment_attempts (1) -> user_answers (many)
+questions (1) -> user_answers (many)
+```
+
+### Supported Question Types
+- **multiple_choice**: Standard A/B/C/D/E questions with mcq_options
+- **email_response**: Written email responses stored in text_answer
+- **video_response**: Video recordings with path stored in video_response_path
+- **likert_scale**: 1-5 rating scale stored in likert_rating
+- **essay**: Long-form written responses in text_answer
+- **timed_video_response**: Video with time constraints
+- **ethical_choice**: Multiple choice ethical dilemmas
+- **forced_choice**: Binary A/B decisions
+- **instructions**: Non-scored informational content
+
+### Key Database Constraints & Indexes
+```sql
+-- Unique constraints to prevent duplicates
+ALTER TABLE parts ADD CONSTRAINT unique_part_sequence_per_assessment 
+    UNIQUE (assessment_id, sequence_order);
+
+ALTER TABLE blocks ADD CONSTRAINT unique_block_sequence_per_part 
+    UNIQUE (part_id, sequence_order);
+
+ALTER TABLE questions ADD CONSTRAINT unique_question_sequence_per_block 
+    UNIQUE (block_id, sequence_order);
+
+ALTER TABLE mcq_options ADD CONSTRAINT unique_option_sequence_per_question 
+    UNIQUE (question_id, sequence_order);
+
+-- Performance indexes
+CREATE INDEX idx_parts_assessment_id ON parts(assessment_id);
+CREATE INDEX idx_blocks_part_id ON blocks(part_id);
+CREATE INDEX idx_questions_block_id ON questions(block_id);
+CREATE INDEX idx_mcq_options_question_id ON mcq_options(question_id);
+CREATE INDEX idx_scenarios_block_id ON scenarios(block_id);
+CREATE INDEX idx_scenario_options_scenario_id ON scenario_options(scenario_id);
+CREATE INDEX idx_assessment_attempts_assessment_id ON assessment_attempts(assessment_id);
+CREATE INDEX idx_user_answers_attempt_id ON user_answers(attempt_id);
+CREATE INDEX idx_user_answers_question_id ON user_answers(question_id);
+```
+
+## TypeScript Interfaces (`src/types/assessment.ts`)
+
+```typescript
+// Database entity interfaces matching the seeded schema:
+
+export interface Assessment {
+  id: number;
+  title: string;
+  description: string | null;
+  created_at: string;
+}
+
+export interface Part {
+  id: number;
+  assessment_id: number;
+  title: string;
+  description: string | null;
+  sequence_order: number;
+  created_at: string;
+}
+
+export interface Block {
+  id: number;
+  part_id: number;
+  title: string;
+  description: string | null;
+  block_type: string; // 'multiple_choice' | 'email_scenario' | 'video_scenario' | 'ethical_scenario'
+  sequence_order: number;
+  created_at: string;
+}
+
+export interface Question {
+  id: number;
+  block_id: number;
+  question_text: string;
+  question_type: string; // 'multiple_choice' | 'email_response' | 'video_response' | 'likert_scale' | 'essay' | etc.
+  sequence_order: number;
+  is_required: boolean;
+  created_at: string;
+  mcq_options?: McqOption[]; // Populated when fetching questions
+}
+
+export interface McqOption {
+  id: number;
+  question_id: number;
+  option_text: string;
+  sequence_order: number;
+  created_at: string;
+}
+
+export interface Scenario {
+  id: number;
+  block_id: number;
+  scenario_text: string;
+  sequence_order: number;
+  created_at: string;
+  scenario_options?: ScenarioOption[]; // Populated when fetching scenarios
+}
+
+export interface ScenarioOption {
+  id: number;
+  scenario_id: number;
+  option_text: string;
+  sequence_order: number;
+  created_at: string;
+}
+
+export interface AssessmentAttempt {
+  id: number;
+  assessment_id: number;
+  user_id: string | null;
+  started_at: string;
+  completed_at: string | null;
+  current_part_id: number | null;
+  auth_users_id: string | null;
+}
+
+export interface UserAnswer {
+  id: number;
+  attempt_id: number;
+  question_id: number;
+  mcq_option_id: number | null;
+  scenario_id: number | null;
+  scenario_option_id: number | null;
+  text_answer: string | null;
+  likert_rating: number | null; // 1-5 scale
+  video_response_path: string | null;
+  answered_at: string;
+}
+
+// Composite interfaces for complex data fetching:
+export interface AssessmentWithStructure extends Assessment {
+  parts: (Part & {
+    blocks: (Block & {
+      questions: Question[];
+      scenarios: Scenario[];
+    })[];
+  })[];
+}
+
+// Answer data for saving responses
+export interface AnswerData {
+  mcq_option_id?: number;
+  scenario_option_id?: number;
+  text_answer?: string;
+  likert_rating?: number; // 1-5
+  video_response_path?: string;
+}
+```
+
+**BUILD THE ASSESSMENT TAKING TOOL** that:
+
+1. **Fetches assessment data** from the existing seeded database
+2. **Handles user authentication** and session management
+3. **Presents questions** in the correct sequence with proper UI
+4. **Saves user responses** to the database in real-time
+5. **Supports multiple question types:**
+   - Multiple choice
+   - Email responses (text)
+   - Video responses (with Supabase Storage)
+   - Likert scale ratings
+   - Essay responses
+   - Scenario-based questions
+
+## Key Implementation Areas
+
+### 1. Database Integration Functions (`src/lib/supabase/`)
+```typescript
+// Functions to build that work with the seeded database:
+
+// Assessment Data Fetching
+- getAssessmentById(id: number) -> Assessment with basic info
+- getAssessmentWithStructure(id: number) -> Complete assessment with parts/blocks/questions
+- getPartsByAssessment(assessmentId: number) -> Parts ordered by sequence_order
+- getBlocksByPart(partId: number) -> Blocks ordered by sequence_order  
+- getQuestionsByBlock(blockId: number) -> Questions with MCQ options ordered by sequence_order
+- getScenariosByBlock(blockId: number) -> Scenarios with options ordered by sequence_order
+
+// Assessment Attempt Management
+- createAssessmentAttempt(assessmentId: number, userId: string) -> New attempt record
+- getAssessmentAttempt(attemptId: number) -> Attempt details with current progress
+- updateAttemptProgress(attemptId: number, currentPartId: number) -> Update current_part_id
+- completeAssessmentAttempt(attemptId: number) -> Set completed_at timestamp
+
+// User Answer Handling
+- saveUserAnswer(attemptId: number, questionId: number, answerData: AnswerData) -> Save to user_answers
+- getUserAnswers(attemptId: number) -> All answers for an attempt
+- getAnswersByQuestion(attemptId: number, questionId: number) -> Specific question answer
+
+// Answer Data Types based on question_type:
+interface AnswerData {
+  mcq_option_id?: number;           // For multiple_choice
+  scenario_option_id?: number;      // For scenario-based questions  
+  text_answer?: string;             // For email_response, essay
+  likert_rating?: number;           // For likert_scale (1-5)
+  video_response_path?: string;     // For video_response, timed_video_response
+}
+```
+
+### 2. Assessment Components (`src/components/assessment/`)
+```typescript
+// Components to build based on database structure:
+
+- AssessmentContainer.tsx          # Main wrapper, handles attempt management
+- PartRenderer.tsx                 # Renders a part with its blocks
+- BlockRenderer.tsx                # Renders a block with its questions/scenarios  
+- QuestionRenderer.tsx             # Routes to specific question type components
+- ScenarioRenderer.tsx             # Handles scenario-based blocks
+
+// Question Type Components (based on question_type field):
+- MultipleChoiceQuestion.tsx       # Renders question + mcq_options
+- TextResponseQuestion.tsx         # For email_response, essay types
+- VideoResponseQuestion.tsx        # For video_response, timed_video_response  
+- LikertScaleQuestion.tsx          # 1-5 scale rating (likert_scale type)
+- InstructionsBlock.tsx            # For instructions type (non-scored)
+- EthicalChoiceQuestion.tsx        # For ethical_choice type
+- ForcedChoiceQuestion.tsx         # For forced_choice type (binary A/B)
+
+// Assessment Navigation & Progress
+- ProgressIndicator.tsx            # Shows progress through parts/blocks
+- NavigationControls.tsx           # Next/Previous/Submit based on sequence_order
+- AssessmentSidebar.tsx            # Overview of parts and current position
+
+// Question Type Props Interface:
+interface QuestionProps {
+  question: {
+    id: number;
+    question_text: string;
+    question_type: string;
+    is_required: boolean;
+    mcq_options?: McqOption[];       # Only for multiple_choice
+  };
+  attemptId: number;
+  currentAnswer?: UserAnswer;        # Existing answer if any
+  onAnswerChange: (answerData: AnswerData) => void;
+  onAnswerSave: () => void;
+}
+```
+
+### 3. Assessment Pages (`src/app/assessment/`)
+```typescript
+// Pages to build:
+- page.tsx                     # Assessment selection/start
+- [attemptId]/page.tsx         # Active assessment taking
+- [attemptId]/complete/page.tsx # Assessment completion
+```
+
+### 4. shadcn/ui Integration
+Use these shadcn components:
+- `Button` - Navigation and actions
+- `Card` - Question containers
+- `RadioGroup` - Multiple choice
+- `Textarea` - Text responses
+- `Progress` - Assessment progress
+- `Badge` - Question types/status
+- `Alert` - Instructions and feedback
+
+## Development Sequence
+
+### Phase 1: Core Infrastructure (START WITH LIVE DATA)
+1. Set up shadcn/ui components
+2. **Create database query functions and test with real assessment data**
+3. **Fetch actual assessment structure for development/testing**
+4. Implement basic authentication flow
+5. **Create assessment attempt management using real assessment IDs**
+
+### Phase 2: Question Rendering (REAL CONTENT)
+1. **Build question type components using actual questions from database**
+2. **Test with real question text, options, and content complexity**
+3. Implement answer saving logic with real attempt records
+4. Create progress tracking based on actual part/block structure
+5. Add navigation controls using real sequence_order values
+
+### Phase 3: Advanced Features
+1. Video recording/upload integration
+2. Real-time answer persistence
+3. Assessment completion flow
+4. Error handling and recovery
+
+### Phase 4: Polish & Testing
+1. Responsive design improvements
+2. Loading states and feedback
+3. Data validation
+4. User experience refinements
+
+## Key Technical Considerations
+
+### Authentication Integration
+- Use Supabase Auth with RLS policies
+- Protect assessment routes with middleware
+- Link assessment attempts to authenticated users
+
+### Real-time Data Persistence
+- Save answers immediately when user responds
+- Handle network interruptions gracefully
+- Provide visual feedback for save states
+
+### Video Handling
+- Use Supabase Storage for video uploads
+- Implement proper file size/type validation
+- Provide recording interface with controls
+
+### Performance Optimization
+- Lazy load questions as needed
+- Implement proper caching strategies
+- Optimize database queries
+
+## Success Criteria
+
+✅ Users can log in and start an assessment
+✅ Questions display correctly based on database content
+✅ All question types render and function properly
+✅ User answers save to database correctly
+✅ Assessment progress tracks accurately
+✅ Video responses upload and store properly
+✅ Assessment completion flow works end-to-end
+✅ UI is responsive and accessible using shadcn/ui
+
+---
+
+**Next Step:** Begin with Phase 1 - Set up shadcn/ui and create the core database query functions that will power the assessment taking experience.

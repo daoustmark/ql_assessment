@@ -578,7 +578,7 @@ e. The lifetime value of students who purchase the initial course
 
 
 
-## Block 4
+## Block 4 - Financial
 ###  33. Explain why verifying whether a business uses accrual vs. cash-based accounting matters when assessing its Seller's Discretionary Earnings (SDE).
 
 a. Cash-based accounting is simpler and more accurate, so businesses using this method typically have higher SDEs
