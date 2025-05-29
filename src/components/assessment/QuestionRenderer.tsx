@@ -14,6 +14,7 @@ interface QuestionRendererProps {
   question: QuestionWithOptions
   currentAnswer?: any
   onAnswerChange: (questionId: number, answerType: string, value: any) => void
+  onAutoAdvance?: () => Promise<void>
   isEthicalQuestion?: boolean
   isDisabled?: boolean
   
@@ -53,6 +54,7 @@ export function QuestionRenderer({
   question,
   currentAnswer,
   onAnswerChange,
+  onAutoAdvance,
   isEthicalQuestion = false,
   isDisabled = false,
   // Video props
@@ -86,6 +88,7 @@ export function QuestionRenderer({
           question={question}
           currentAnswer={currentAnswer}
           onAnswerChange={onAnswerChange}
+          onAutoAdvance={onAutoAdvance}
           isEthicalQuestion={isEthicalQuestion}
           isDisabled={isDisabled}
         />
