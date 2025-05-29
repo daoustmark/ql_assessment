@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Search, Play } from 'lucide-react'
 import { getAllAssessments, testDatabaseConnection, createAssessmentAttempt } from '@/lib/supabase/queries'
-import type { Assessment } from '@/types/database'
+import type { Assessment } from '@/types'
 
 export default function HomePage() {
   const router = useRouter()
@@ -98,9 +99,37 @@ export default function HomePage() {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-4">Assessment Platform</h1>
-          <p className="text-xl text-muted-foreground">
+          <p className="text-xl text-muted-foreground mb-6">
             Select an assessment to begin your evaluation
           </p>
+          
+          {/* Assessment Options */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold mb-2">Start New Assessment</h3>
+              <p className="text-sm text-muted-foreground">
+                Choose from available assessments below
+              </p>
+            </div>
+            
+            <div className="hidden sm:block text-muted-foreground">or</div>
+            
+            <div className="text-center">
+              <h3 className="text-lg font-semibold mb-2">Continue Assessment</h3>
+              <Button 
+                variant="outline" 
+                size="lg"
+                onClick={() => router.push('/assessment')}
+                className="min-w-[200px]"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Find My Assessments
+              </Button>
+              <p className="text-xs text-muted-foreground mt-1">
+                Resume where you left off
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -139,13 +168,37 @@ export default function HomePage() {
                     onClick={() => handleStartAssessment(assessment.id)}
                     disabled={startingAssessment === assessment.id}
                   >
-                    {startingAssessment === assessment.id ? 'Starting...' : 'Start Assessment'}
+                    {startingAssessment === assessment.id ? (
+                      'Starting...'
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Start Assessment
+                      </>
+                    )}
                   </Button>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
+
+        {/* Help Section */}
+        <div className="mt-12 text-center">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 max-w-2xl mx-auto">
+            <h3 className="text-lg font-semibold text-blue-900 mb-2">Need Help?</h3>
+            <div className="text-blue-800 space-y-2">
+              <p>
+                <strong>Already started an assessment?</strong> Use the "Find My Assessments" button above 
+                to continue where you left off.
+              </p>
+              <p>
+                <strong>Have an invitation link?</strong> Click on the link in your email to access 
+                your specific assessment.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

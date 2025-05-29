@@ -9,10 +9,12 @@ import {
   Settings,
   Users,
   BarChart3,
-  ArrowLeft
+  ArrowLeft,
+  Mail
 } from 'lucide-react'
 import Link from 'next/link'
 import { getAssessmentById } from '@/lib/supabase/queries'
+import { getInvitationsByAssessment } from '@/lib/supabase/invitation-queries'
 import { notFound } from 'next/navigation'
 import { 
   Tabs, 
@@ -20,6 +22,8 @@ import {
   TabsList, 
   TabsTrigger 
 } from '@/components/ui/tabs'
+import { InviteForm } from '@/components/admin/InviteForm'
+import { InvitationsSection } from '@/components/admin/InvitationsSection'
 
 interface PageProps {
   params: Promise<{
@@ -30,7 +34,11 @@ interface PageProps {
 export default async function AssessmentDetailPage({ params }: PageProps) {
   const { id } = await params
   const assessmentId = parseInt(id)
-  const assessment = await getAssessmentById(assessmentId)
+  
+  const [assessment, invitations] = await Promise.all([
+    getAssessmentById(assessmentId),
+    getInvitationsByAssessment(assessmentId)
+  ])
 
   if (!assessment) {
     notFound()
@@ -41,6 +49,14 @@ export default async function AssessmentDetailPage({ params }: PageProps) {
       (blockTotal, block) => blockTotal + (block.questions?.length || 0), 0
     ) || 0), 0
   ) || 0
+
+  // Calculate invitation stats for this assessment
+  const invitationStats = {
+    total: invitations.length,
+    pending: invitations.filter(inv => inv.status === 'pending').length,
+    accepted: invitations.filter(inv => inv.status === 'accepted').length,
+    expired: invitations.filter(inv => inv.status === 'expired').length,
+  }
 
   return (
     <div className="space-y-6">
@@ -75,7 +91,7 @@ export default async function AssessmentDetailPage({ params }: PageProps) {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
@@ -108,7 +124,21 @@ export default async function AssessmentDetailPage({ params }: PageProps) {
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
               <div className="p-2 bg-purple-100 rounded">
-                <Users className="h-4 w-4 text-purple-600" />
+                <Mail className="h-4 w-4 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Invitations</p>
+                <p className="text-2xl font-bold">{invitationStats.total}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 bg-orange-100 rounded">
+                <Users className="h-4 w-4 text-orange-600" />
               </div>
               <div>
                 <p className="text-sm font-medium">Attempts</p>
@@ -121,8 +151,8 @@ export default async function AssessmentDetailPage({ params }: PageProps) {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <div className="p-2 bg-orange-100 rounded">
-                <BarChart3 className="h-4 w-4 text-orange-600" />
+              <div className="p-2 bg-teal-100 rounded">
+                <BarChart3 className="h-4 w-4 text-teal-600" />
               </div>
               <div>
                 <p className="text-sm font-medium">Completion Rate</p>
@@ -137,6 +167,14 @@ export default async function AssessmentDetailPage({ params }: PageProps) {
       <Tabs defaultValue="structure" className="space-y-4">
         <TabsList>
           <TabsTrigger value="structure">Structure</TabsTrigger>
+          <TabsTrigger value="invitations">
+            Invitations
+            {invitationStats.total > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {invitationStats.total}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="attempts">Attempts</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -238,6 +276,59 @@ export default async function AssessmentDetailPage({ params }: PageProps) {
           )}
         </TabsContent>
 
+        <TabsContent value="invitations" className="space-y-6">
+          {/* Invitation Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">{invitationStats.pending}</p>
+                  <p className="text-sm text-blue-800">Pending</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">{invitationStats.accepted}</p>
+                  <p className="text-sm text-green-800">Accepted</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-600">{invitationStats.expired}</p>
+                  <p className="text-sm text-gray-800">Expired</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-purple-600">{invitationStats.total}</p>
+                  <p className="text-sm text-purple-800">Total Sent</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Invitation Form */}
+            <div>
+              <InviteForm 
+                assessment={assessment} 
+              />
+            </div>
+
+            {/* Recent Invitations */}
+            <InvitationsSection 
+              invitations={invitations} 
+              assessment={assessment} 
+            />
+          </div>
+        </TabsContent>
+
         <TabsContent value="attempts">
           <Card>
             <CardHeader>
@@ -286,7 +377,7 @@ export default async function AssessmentDetailPage({ params }: PageProps) {
                 <div>
                   <label className="text-sm font-medium">Instructions</label>
                   <p className="text-sm text-gray-600">
-                    {assessment.instructions || 'No instructions provided'}
+                    {assessment.instruction_overall || assessment.instruction_detailed || 'No instructions provided'}
                   </p>
                 </div>
               </div>

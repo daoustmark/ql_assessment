@@ -50,7 +50,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json()
-    const { title, description, instructions, time_limit_overall } = body
+    
+    const { 
+      title, 
+      description,
+      total_points,
+      passing_score
+    } = body
 
     // Validate required fields
     if (!title || title.trim() === '') {
@@ -60,13 +66,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       )
     }
 
+    // Only update fields that actually exist in the database
     const updates = {
       title: title.trim(),
       description: description?.trim() || null,
-      instructions: instructions?.trim() || null,
-      time_limit_overall: time_limit_overall || null
+      total_points: total_points ? parseInt(total_points) : null,
+      passing_score: passing_score ? parseInt(passing_score) : null
     }
-
+    
     const success = await updateAssessment(assessmentId, updates)
     
     if (!success) {

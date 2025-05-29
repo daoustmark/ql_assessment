@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { getAllAssessmentsForAdmin } from '@/lib/supabase/admin-queries'
+import type { PartWithBlocks, BlockWithQuestions } from '@/types'
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -56,9 +57,14 @@ export default async function AssessmentsPage() {
         <div className="grid gap-6">
           {assessments.map((assessment) => {
             const totalQuestions = assessment.parts?.reduce(
-              (total, part) => total + (part.blocks?.reduce(
-                (blockTotal, block) => blockTotal + (block.questions?.length || 0), 0
-              ) || 0), 0
+              (total: number, part: PartWithBlocks) => {
+                if (!part.blocks) return total
+                return total + part.blocks.reduce(
+                  (blockTotal: number, block: BlockWithQuestions) => blockTotal + (block.questions?.length || 0), 
+                  0
+                )
+              }, 
+              0
             ) || 0
 
             return (

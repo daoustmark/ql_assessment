@@ -1,5 +1,5 @@
 import { supabase } from './client'
-import type { Assessment, AssessmentAttempt, AssessmentWithParts } from '@/types/assessment'
+import type { Assessment, AssessmentAttempt, AssessmentWithParts, AssessmentAttemptWithProgress } from '@/types'
 
 export interface AdminDashboardData {
   totalAssessments: number
@@ -152,7 +152,7 @@ export async function deleteAssessment(id: number): Promise<boolean> {
 }
 
 // Assessment Attempts Management
-export async function getAllAttempts(): Promise<AssessmentAttempt[]> {
+export async function getAllAttempts(): Promise<AssessmentAttemptWithProgress[]> {
   const { data, error } = await supabase
     .from('assessment_attempts')
     .select(`
@@ -160,6 +160,11 @@ export async function getAllAttempts(): Promise<AssessmentAttempt[]> {
       assessments (
         title,
         id
+      ),
+      invitation:assessment_invitations!assessment_attempts_invitation_id_fkey (
+        invited_email,
+        invitation_name,
+        invited_at
       )
     `)
     .order('started_at', { ascending: false })
@@ -215,6 +220,12 @@ export async function getAttemptWithDetails(attemptId: number) {
       assessments (
         title,
         description
+      ),
+      invitation:assessment_invitations!assessment_attempts_invitation_id_fkey (
+        invited_email,
+        invitation_name,
+        invited_at,
+        custom_message
       ),
       user_answers (
         *,

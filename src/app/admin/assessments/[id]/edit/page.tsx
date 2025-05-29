@@ -144,8 +144,8 @@ export default function EditAssessmentPage({ params }: PageProps) {
         body: JSON.stringify({
           title: assessment.title,
           description: assessment.description,
-          instructions: assessment.instructions,
-          time_limit_overall: assessment.time_limit_overall ? parseInt(assessment.time_limit_overall) : null
+          total_points: assessment.total_points ? parseInt(assessment.total_points) : null,
+          passing_score: assessment.passing_score ? parseInt(assessment.passing_score) : null
         })
       })
 
@@ -233,25 +233,27 @@ export default function EditAssessmentPage({ params }: PageProps) {
     if (!editingQuestionData) return
 
     try {
+      const payload = {
+        question_text: editingQuestionData.question_text,
+        question_type: editingQuestionData.question_type,
+        is_required: editingQuestionData.is_required,
+        time_limit: editingQuestionData.time_limit,
+        mcq_options: editingQuestionData.question_type === 'multiple_choice' 
+          ? editingQuestionData.mcq_options.filter((opt: any) => opt.option_text.trim())
+          : []
+      }
+      
       const response = await fetch(`/api/admin/questions/${editingQuestionData.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question_text: editingQuestionData.question_text,
-          question_type: editingQuestionData.question_type,
-          is_required: editingQuestionData.is_required,
-          time_limit: editingQuestionData.time_limit,
-          mcq_options: editingQuestionData.question_type === 'multiple_choice' 
-            ? editingQuestionData.mcq_options.filter((opt: any) => opt.option_text.trim())
-            : []
-        })
+        body: JSON.stringify(payload)
       })
 
       if (response.ok) {
         const updatedQuestion = await response.json()
         toast.success('Question updated successfully!')
         
-        // Update the local assessment data
+        // Update the local assessment data WITHOUT reloading from server
         setAssessment((prev: any) => {
           const updated = { ...prev }
           updated.parts = updated.parts.map((part: any) => ({
@@ -259,15 +261,22 @@ export default function EditAssessmentPage({ params }: PageProps) {
             blocks: part.blocks.map((block: any) => ({
               ...block,
               questions: block.questions.map((q: any) => 
-                q.id === editingQuestionData.id ? updatedQuestion : q
+                q.id === editingQuestionData.id ? {
+                  ...updatedQuestion,
+                  // Preserve mcq_options from the response if available, otherwise keep existing
+                  mcq_options: updatedQuestion.mcq_options || editingQuestionData.mcq_options
+                } : q
               )
             }))
           }))
           return updated
         })
 
+        // Close the editing interface but preserve expanded state
         setEditingQuestion(null)
         setEditingQuestionData(null)
+        
+        // Keep user in the same place - sections stay expanded!
       } else {
         const error = await response.json()
         toast.error(error.error || 'Failed to update question')
@@ -593,27 +602,30 @@ export default function EditAssessmentPage({ params }: PageProps) {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="instructions">Instructions</Label>
-                <Textarea
-                  id="instructions"
-                  value={assessment.instructions || ''}
-                  onChange={(e) => handleBasicInfoChange('instructions', e.target.value)}
-                  placeholder="Enter instructions for test takers..."
-                  rows={4}
-                />
-              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="total_points">Total Points</Label>
+                  <Input
+                    id="total_points"
+                    type="number"
+                    value={assessment.total_points || ''}
+                    onChange={(e) => handleBasicInfoChange('total_points', e.target.value)}
+                    placeholder="Enter total points..."
+                    min="1"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="time_limit">Time Limit (minutes)</Label>
-                <Input
-                  id="time_limit"
-                  type="number"
-                  value={assessment.time_limit_overall || ''}
-                  onChange={(e) => handleBasicInfoChange('time_limit_overall', e.target.value)}
-                  placeholder="Leave blank for no time limit"
-                  min="1"
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="passing_score">Passing Score</Label>
+                  <Input
+                    id="passing_score"
+                    type="number"
+                    value={assessment.passing_score || ''}
+                    onChange={(e) => handleBasicInfoChange('passing_score', e.target.value)}
+                    placeholder="Enter passing score..."
+                    min="1"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
