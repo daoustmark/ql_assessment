@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Search, Play, Clock, Calendar, Users, CheckCircle, ArrowRight } from 'lucide-react'
 import { getAllAssessments, testDatabaseConnection, createAssessmentAttempt } from '@/lib/supabase/queries'
+import { PreAssessmentForm } from '@/components/assessment/PreAssessmentForm'
 import type { Assessment } from '@/types'
 
 export default function HomePage() {
@@ -13,7 +14,9 @@ export default function HomePage() {
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const [loading, setLoading] = useState(true)
   const [connectionStatus, setConnectionStatus] = useState<'testing' | 'connected' | 'failed'>('testing')
-  const [startingAssessment, setStartingAssessment] = useState<number | null>(null)
+  const [showPreAssessmentForm, setShowPreAssessmentForm] = useState(false)
+  const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null)
+  const [startingAssessment, setStartingAssessment] = useState(false)
 
   useEffect(() => {
     async function initializeApp() {
@@ -33,28 +36,44 @@ export default function HomePage() {
     initializeApp()
   }, [])
 
-  const handleStartAssessment = async (assessmentId: number) => {
-    setStartingAssessment(assessmentId)
+  const handleStartAssessmentClick = (assessment: Assessment) => {
+    setSelectedAssessment(assessment)
+    setShowPreAssessmentForm(true)
+  }
+
+  const handlePreAssessmentSubmit = async (name: string, email: string) => {
+    if (!selectedAssessment) return
+    
+    setStartingAssessment(true)
     
     try {
-      // For now, we'll use a dummy user ID. In a real app, this would come from authentication
+      // Create an assessment attempt with name and email
       const dummyUserId = `user_${Date.now()}`
-      
-      // Create an assessment attempt
-      const attempt = await createAssessmentAttempt(assessmentId, dummyUserId)
+      const attempt = await createAssessmentAttempt(selectedAssessment.id, dummyUserId, name, email)
       
       if (attempt) {
         // Redirect to the assessment taking page
         router.push(`/assessment/${attempt.id}`)
       } else {
         alert('Failed to start assessment. Please try again.')
+        setStartingAssessment(false)
       }
     } catch (error) {
       console.error('Error starting assessment:', error)
       alert('Failed to start assessment. Please try again.')
-    } finally {
-      setStartingAssessment(null)
+      setStartingAssessment(false)
     }
+  }
+
+  // If showing pre-assessment form, render that instead
+  if (showPreAssessmentForm && selectedAssessment) {
+    return (
+      <PreAssessmentForm
+        assessmentTitle={selectedAssessment.title}
+        onSubmit={handlePreAssessmentSubmit}
+        isLoading={startingAssessment}
+      />
+    )
   }
 
   if (loading) {
@@ -168,20 +187,10 @@ export default function HomePage() {
                   <Button 
                     className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-md hover:shadow-lg transition-all duration-200" 
                     size="lg"
-                    onClick={() => handleStartAssessment(assessments[0].id)}
-                    disabled={startingAssessment === assessments[0].id}
+                    onClick={() => handleStartAssessmentClick(assessments[0])}
                   >
-                    {startingAssessment === assessments[0].id ? (
-                      <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Starting...
-                      </div>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Start Assessment
-                      </>
-                    )}
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Assessment
                   </Button>
                 ) : (
                   <Button 

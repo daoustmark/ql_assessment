@@ -60,13 +60,17 @@ export async function getAllAssessments(): Promise<Assessment[]> {
 // Assessment Attempt Queries
 export async function createAssessmentAttempt(
   assessmentId: number,
-  userId: string
+  userId: string,
+  name?: string,
+  email?: string
 ): Promise<AssessmentAttempt | null> {
   const { data, error } = await supabase
     .from('assessment_attempts')
     .insert({
       assessment_id: assessmentId,
       user_id: userId,
+      invitee_name: name,
+      invitee_email: email,
       started_at: new Date().toISOString()
     })
     .select()
